@@ -1,0 +1,46 @@
+package db
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
+	"github.com/elastic/go-elasticsearch/v8"
+)
+
+// BulkIndexer const
+const NUM_WORKERS = 5
+const FLUSH_BYTES = 5000000
+const FLUSH_INTERVAL = time.Second * 30
+
+// Client Connection
+func NewConnectionEs() (*elasticsearch.Client, error) {
+	retryBackoff := backoff.NewExponentialBackOff()
+
+	cfg := elasticsearch.Config{
+		Addresses: []string{
+			fmt.Sprintf("http://%s:%d", settingsData.ELS_HOST, settingsData.ELS_PORT),
+		},
+		Transport: &http.Transport{
+			MaxIdleConns:          10,
+			ResponseHeaderTimeout: time.Second * 2,
+		},
+		// Retry on 429 TooManyRequests statuses
+		RetryOnStatus: []int{502, 503, 504, 429},
+		// Configure the backoff function
+		RetryBackoff: func(attempt int) time.Duration {
+			if attempt == 1 {
+				retryBackoff.Reset()
+			}
+			return retryBackoff.NextBackOff()
+		},
+		MaxRetries: 5,
+	}
+
+	es, err := elasticsearch.NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return es, nil
+}
