@@ -3,6 +3,7 @@ package settings
 import (
 	"log"
 	"os"
+	"strconv"
 	"sync"
 
 	"github.com/joho/godotenv"
@@ -21,9 +22,15 @@ type settings struct {
 	NATS_HOST           string
 	AWS_BUCKET          string
 	AWS_REGION          string
+	ELS_HOST            string
+	ELS_PORT            int
 }
 
 func newSettings() *settings {
+	elsPort, err := strconv.Atoi(os.Getenv("ELS_PORT"))
+	if err != nil {
+		panic(err)
+	}
 	return &settings{
 		JWT_SECRET_KEY:      os.Getenv("JWT_SECRET_KEY"),
 		MONGO_DB:            os.Getenv("MONGO_DB"),
@@ -32,6 +39,8 @@ func newSettings() *settings {
 		MONGO_HOST:          os.Getenv("MONGO_HOST"),
 		MONGO_CONNECTION:    os.Getenv("MONGO_CONNECTION"),
 		NATS_HOST:           os.Getenv("NATS_HOST"),
+		ELS_HOST:            os.Getenv("ELS_HOST"),
+		ELS_PORT:            elsPort,
 		AWS_BUCKET:          os.Getenv("AWS_BUCKET"),
 		AWS_REGION:          os.Getenv("AWS_REGION"),
 	}
