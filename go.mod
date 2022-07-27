@@ -14,7 +14,6 @@ require (
 	github.com/joho/godotenv v1.4.0
 	github.com/klauspost/compress v1.14.4
 	github.com/nats-io/nats.go v1.16.0
-	github.com/robfig/cron/v3 v3.0.0
 	go.mongodb.org/mongo-driver v1.9.1
 )
 
