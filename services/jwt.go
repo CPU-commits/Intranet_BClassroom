@@ -15,6 +15,7 @@ var jwtKey = settings.GetSettings().JWT_SECRET_KEY
 type Claims struct {
 	ID       string
 	UserType string
+	Name     string
 }
 
 func extractToken(r *http.Request) string {
@@ -45,6 +46,7 @@ func ExtractTokenMetadata(token *jwt.Token) (*Claims, error) {
 	return &Claims{
 		ID:       fmt.Sprintf("%v", claim["_id"]),
 		UserType: fmt.Sprintf("%v", claim["user_type"]),
+		Name:     fmt.Sprintf("%v", claim["name"]),
 	}, nil
 }
 
@@ -56,5 +58,6 @@ func NewClaimsFromContext(ctx *gin.Context) (*Claims, bool) {
 	return &Claims{
 		ID:       user.(*Claims).ID,
 		UserType: user.(*Claims).UserType,
+		Name:     user.(*Claims).Name,
 	}, true
 }
