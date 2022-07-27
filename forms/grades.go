@@ -1,0 +1,14 @@
+package forms
+
+// Program
+type AcumulativeForm struct {
+	Percentage float32 `json:"percentage" binding:"required"`
+	Number     int     `json:"number" binding:"required,min=1"`
+}
+
+type GradeProgramForm struct {
+	Number        int               `json:"number" binding:"required,min=1,max=30"`
+	Percentage    float32           `json:"percentage" binding:"required"`
+	IsAcumulative *bool             `json:"is_acumulative" binding:"required"`
+	Acumulative   []AcumulativeForm `json:"acumulative" binding:"dive"`
+}
