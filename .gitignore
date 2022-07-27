@@ -5,4 +5,5 @@
 .env
 
 #main
-main*
+main_*
+!*.go
