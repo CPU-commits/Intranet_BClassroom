@@ -10,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const NO_SINGLE_DOCUMENT = "mongo: no documents in result"
+
 var settingsData = settings.GetSettings()
 var collection *mongo.Collection
 var Ctx = context.TODO()
