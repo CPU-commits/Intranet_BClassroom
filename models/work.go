@@ -71,11 +71,11 @@ type WorkWLookup struct {
 }
 
 type AttachedRes struct {
-	ID    string `json:"_id"`
-	Type  string `json:"type"`
-	File  *File  `json:"file,omitempty"`
-	Link  string `json:"link,omitempty"`
-	Title string `json:"title,omitempty"`
+	ID    string `json:"_id" bson:"_id"`
+	Type  string `json:"type" bson:"type"`
+	File  *File  `json:"file,omitempty" bson:"file"`
+	Link  string `json:"link,omitempty" bson:"link"`
+	Title string `json:"title,omitempty" bson:"title"`
 }
 
 type WorkWLookupNFiles struct {
@@ -102,12 +102,13 @@ type WorkWLookupNFiles struct {
 
 // ElasticSearch Struct - Work indexer
 type WorkES struct {
-	Title     string    `json:"title"`
-	DateStart time.Time `json:"date_start"`
-	DateLimit time.Time `json:"date_limit"`
-	Author    string    `json:"author"`
-	IDModule  string    `json:"id_module"`
-	Published time.Time `json:"published"`
+	Title       string    `json:"title"`
+	Description string    `json:"description,omitempty"`
+	DateStart   time.Time `json:"date_start"`
+	DateLimit   time.Time `json:"date_limit"`
+	Author      string    `json:"author"`
+	IDModule    string    `json:"id_module"`
+	Published   time.Time `json:"published"`
 }
 
 type WorkModel struct {

@@ -37,6 +37,7 @@ type Grade struct {
 	Module        primitive.ObjectID `json:"module" bson:"module"`
 	Student       primitive.ObjectID `json:"student" bson:"student"`
 	Program       primitive.ObjectID `json:"program" bson:"program"`
+	Acumulative   primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,,omitempty"`
 	IsAcumulative bool               `json:"is_acumulative" bson:"is_acumulative"`
 	Evaluator     primitive.ObjectID `json:"evaluator" bson:"evaluator"`
 	Grade         float64            `json:"grade" bson:"grade"`
@@ -44,13 +45,14 @@ type Grade struct {
 }
 
 type GradeWLookup struct {
-	ID        primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Module    primitive.ObjectID `json:"module" bson:"module"`
-	Student   primitive.ObjectID `json:"student" bson:"student"`
-	Program   primitive.ObjectID `json:"program" bson:"program"`
-	Evaluator SimpleUser         `json:"evaluator" bson:"evaluator"`
-	Grade     float64            `json:"grade" bson:"grade"`
-	Date      primitive.DateTime `json:"date" bson:"date"`
+	ID          primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	Module      primitive.ObjectID `json:"module" bson:"module"`
+	Student     primitive.ObjectID `json:"student" bson:"student"`
+	Program     primitive.ObjectID `json:"program" bson:"program"`
+	Acumulative primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty"`
+	Evaluator   SimpleUser         `json:"evaluator" bson:"evaluator"`
+	Grade       float64            `json:"grade" bson:"grade"`
+	Date        primitive.DateTime `json:"date" bson:"date"`
 }
 
 type GradesProgramModel struct {
@@ -88,6 +90,7 @@ func NewModelGradesProgram(
 func NewModelGrade(
 	module,
 	student,
+	acumulative,
 	program,
 	evaluator primitive.ObjectID,
 	grade float64,
@@ -100,6 +103,7 @@ func NewModelGrade(
 		Evaluator:     evaluator,
 		Grade:         grade,
 		IsAcumulative: isAcumulative,
+		Acumulative:   acumulative,
 		Date:          primitive.NewDateTimeFromTime(time.Now()),
 	}
 }
@@ -249,6 +253,7 @@ func initGrades(collections []string) error {
 			"module":         bson.M{"bsonType": "objectId"},
 			"student":        bson.M{"bsonType": "objectId"},
 			"program":        bson.M{"bsonType": "objectId"},
+			"acumulative":    bson.M{"bsonType": "objectId"},
 			"evaluator":      bson.M{"bsonType": "objectId"},
 			"grade":          bson.M{"bsonType": "double"},
 			"is_acumulative": bson.M{"bsonType": "bool"},

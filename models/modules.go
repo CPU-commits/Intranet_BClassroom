@@ -35,6 +35,8 @@ type ModuleWithLookup struct {
 	Status      bool               `json:"status" bson:"status"`
 	SubSections []SubSection       `json:"sub_sections" bson:"sub_sections"`
 	V           int32              `json:"__v" bson:"__v"`
+	// Works
+	Works []Work `json:"works,omitempty"`
 }
 
 type ModuleModel struct {
