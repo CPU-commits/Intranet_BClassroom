@@ -101,7 +101,7 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 		return nil, 0, err
 	}
 	// Get publications content
-	var publicationsRes []*PublicationsRes
+	publicationsRes := make([]*PublicationsRes, len(publications))
 
 	es, err := db.NewConnectionEs()
 	if err != nil {
@@ -109,9 +109,10 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 	}
 	var newErr error
 	var wg sync.WaitGroup
-	for _, publication := range publications {
+	for i, publication := range publications {
 		wg.Add(1)
-		go func(publication *models.Publication, retErr *error, wg *sync.WaitGroup) {
+
+		go func(publication *models.Publication, i int, retErr *error, wg *sync.WaitGroup) {
 			defer wg.Done()
 			res, err := es.Get(models.PUBLICATIONS_INDEX, publication.ID.Hex())
 			if err != nil {
@@ -147,16 +148,16 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 				})
 			}
 			// Add response
-			publicationsRes = append(publicationsRes, &PublicationsRes{
+			publicationsRes[i] = &PublicationsRes{
 				Attached:   attacheds,
 				Content:    mapRes["_source"],
 				ID:         publication.ID.Hex(),
 				UploadDate: publication.UploadDate,
 				UpdateDate: publication.UpdateDate,
-			})
+			}
 			// Close body
 			res.Body.Close()
-		}(publication, &newErr, &wg)
+		}(publication, i, &newErr, &wg)
 	}
 	wg.Wait()
 	if newErr != nil {
@@ -175,6 +176,104 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 		}
 	}
 	return publicationsRes, totalData, nil
+}
+
+func (p *PublicationService) GetPublication(idModule, idPublication string) (*PublicationsRes, error) {
+	idObjModule, err := primitive.ObjectIDFromHex(idModule)
+	if err != nil {
+		return nil, err
+	}
+	idObjPublication, err := primitive.ObjectIDFromHex(idPublication)
+	if err != nil {
+		return nil, err
+	}
+	// Match
+	match := bson.D{
+		{
+			Key: "$match",
+			Value: bson.M{
+				"_id": idObjPublication,
+			},
+		},
+	}
+	// Get publication
+	var publication []*models.Publication
+	cursor, err := publicationModel.Aggreagate(mongo.Pipeline{match})
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.All(db.Ctx, &publication); err != nil {
+		return nil, err
+	}
+
+	if len(publication) == 0 {
+		return nil, fmt.Errorf("No existe esta publicación")
+	}
+	// Get module
+	var module *models.Module
+	cursorM := moduleModel.GetByID(idObjModule)
+	if err := cursorM.Decode(&module); err != nil {
+		return nil, err
+	}
+
+	var flag bool
+	for _, subSection := range module.SubSections {
+		if subSection.ID == publication[0].SubSection {
+			flag = true
+			break
+		}
+	}
+	if !flag {
+		return nil, fmt.Errorf("Esta publicación no pertenece a este módulo")
+	}
+	// Get publications content
+	var publicationsRes *PublicationsRes
+
+	es, err := db.NewConnectionEs()
+	if err != nil {
+		return nil, err
+	}
+	res, err := es.Get(models.PUBLICATIONS_INDEX, publication[0].ID.Hex())
+	if err != nil {
+		return nil, err
+	}
+	// Close body
+	defer res.Body.Close()
+	// Decode data
+	var mapRes map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&mapRes); err != nil {
+		return nil, err
+	}
+	// Get files
+	var attacheds []AttachedRes
+
+	for _, attached := range publication[0].Attached {
+		var file *models.File
+
+		if attached.Type == "file" {
+			file, err = fileModel.GetFileByID(attached.File)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		attacheds = append(attacheds, AttachedRes{
+			ID:    attached.ID.Hex(),
+			Type:  attached.Type,
+			Link:  attached.Link,
+			Title: attached.Title,
+			File:  file,
+		})
+	}
+	// Add response
+	publicationsRes = &PublicationsRes{
+		Attached:   attacheds,
+		Content:    mapRes["_source"],
+		ID:         publication[0].ID.Hex(),
+		UploadDate: publication[0].UploadDate,
+		UpdateDate: publication[0].UpdateDate,
+	}
+	return publicationsRes, nil
 }
 
 func (publication *PublicationService) NewPublication(

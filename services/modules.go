@@ -1,8 +1,12 @@
 package services
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
@@ -258,7 +262,7 @@ func (module *ModulesService) GetModule(moduleId string) (*models.ModuleWithLook
 	return moduleData[0], nil
 }
 
-func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string) ([]models.ModuleWithLookup, error) {
+func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string, simple bool) ([]models.ModuleWithLookup, error) {
 	// Section IDs must be > 0
 	if len(sectionIds) == 0 {
 		return nil, nil
@@ -284,25 +288,88 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 	if len(modulesData) == 0 {
 		return modulesData, nil
 	}
-	// Get aws keys
-	var images []string
-	for i := 0; i < len(modulesData); i++ {
-		images = append(images, modulesData[i].Section.File.Key)
-	}
-	data, err := json.Marshal(images)
-	if err != nil {
-		return nil, err
-	}
-	msg, err := nats.Request("get_aws_token_access", data)
-	if err != nil {
-		return nil, err
-	}
+	if !simple {
+		// Get aws keys
+		var images []string
+		for i := 0; i < len(modulesData); i++ {
+			images = append(images, modulesData[i].Section.File.Key)
+		}
+		data, err := json.Marshal(images)
+		if err != nil {
+			return nil, err
+		}
+		msg, err := nats.Request("get_aws_token_access", data)
+		if err != nil {
+			return nil, err
+		}
 
-	var imagesURLs []string
-	json.Unmarshal(msg.Data, &imagesURLs)
-	// Add image URLs to modules
-	for i := 0; i < len(modulesData); i++ {
-		modulesData[i].Section.File.Url = imagesURLs[i]
+		var imagesURLs []string
+		json.Unmarshal(msg.Data, &imagesURLs)
+		// Add image URLs to modules
+		for i := 0; i < len(modulesData); i++ {
+			modulesData[i].Section.File.Url = imagesURLs[i]
+		}
+		// Get next works
+		var wg sync.WaitGroup
+
+		for i, module := range modulesData {
+			wg.Add(1)
+
+			go func(module models.ModuleWithLookup, i int, wg *sync.WaitGroup, errRet *error) {
+				defer wg.Done()
+
+				var works []models.Work
+
+				match := bson.D{{
+					Key: "$match",
+					Value: bson.M{
+						"module":     module.ID,
+						"is_revised": false,
+						"date_limit": bson.M{
+							"$gte": primitive.NewDateTimeFromTime(time.Now()),
+						},
+					},
+				}}
+				limit := bson.D{{
+					Key:   "$limit",
+					Value: 3,
+				}}
+				sort := bson.D{{
+					Key: "$sort",
+					Value: bson.M{
+						"date_limit": 1,
+					},
+				}}
+				project := bson.D{{
+					Key: "$project",
+					Value: bson.M{
+						"title":        1,
+						"is_qualified": 1,
+						"type":         1,
+						"date_limit":   1,
+					},
+				}}
+				cursor, err := workModel.Aggreagate(mongo.Pipeline{
+					match,
+					limit,
+					sort,
+					project,
+				})
+				if err != nil {
+					*errRet = err
+					return
+				}
+				if err := cursor.All(db.Ctx, &works); err != nil {
+					*errRet = err
+					return
+				}
+				modulesData[i].Works = works
+			}(module, i, &wg, &err)
+		}
+		wg.Wait()
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Get only courses
 	return modulesData, nil
@@ -327,6 +394,40 @@ func (module *ModulesService) NewSubSection(
 		return nil, err
 	}
 	return sectionId.Hex(), nil
+}
+
+func (module *ModulesService) Search(idModule, search string) (interface{}, error) {
+	simpleQuery := fmt.Sprintf(
+		`"bool": {"must": { "simple_query_string": { "query": "%s*", "analyzer": "standard" } },`,
+		search,
+	)
+	simpleQuery += fmt.Sprintf(`"filter": { "term": { "id_module": "%s" } } }`, idModule)
+
+	query := db.ConstructQuery(simpleQuery)
+	var mapRes map[string]interface{}
+	var buf bytes.Buffer
+
+	if err := json.NewEncoder(&buf).Encode(query); err != nil {
+		return nil, err
+	}
+	es, err := db.NewConnectionEs()
+	if err != nil {
+		return nil, err
+	}
+	res, err := es.Search(
+		es.Search.WithContext(context.Background()),
+		es.Search.WithIndex(models.PUBLICATIONS_INDEX, models.WORKS_INDEX),
+		es.Search.WithBody(query),
+		es.Search.WithTrackTotalHits(true),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if err := json.NewDecoder(res.Body).Decode(&mapRes); err != nil {
+		return nil, err
+	}
+	return mapRes["hits"], nil
 }
 
 func (module *ModulesService) DownloadModuleFile(

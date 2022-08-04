@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"math"
 	"mime/multipart"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var workService *WorkSerice
@@ -41,9 +43,9 @@ type Student struct {
 	V                  int                                  `json:"__v"`
 	RegistrationNumber string                               `json:"registration_number"`
 	Course             string                               `json:"course"`
-	AccessForm         *models.FormAccess                   `json:"access"`
-	FilesUploaded      *models.FileUploadedClassroomWLookup `json:"files_uploaded"`
-	Evuluate           map[string]int                       `json:"evaluate"`
+	AccessForm         *models.FormAccess                   `json:"access,omitempty"`
+	FilesUploaded      *models.FileUploadedClassroomWLookup `json:"files_uploaded,omitempty"`
+	Evuluate           map[string]int                       `json:"evaluate,omitempty"`
 }
 
 type AnswerRes struct {
@@ -88,6 +90,158 @@ func (w *WorkSerice) GetLookupGrade() bson.D {
 			},
 		},
 	}
+}
+
+func (w *WorkSerice) GetModulesWorks(claims Claims) (interface{}, error) {
+	idObjUser, err := primitive.ObjectIDFromHex(claims.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get modules
+	courses, err := FindCourses(&claims)
+	if err != nil {
+		return nil, err
+	}
+	modules, err := moduleService.GetModules(courses, claims.UserType, true)
+	if err != nil {
+		return nil, err
+	}
+	var modulesOr bson.A
+	for _, module := range modules {
+		modulesOr = append(modulesOr, bson.M{
+			"module": module.ID,
+		})
+	}
+	// Get works
+	var works []models.Work
+	match := bson.D{{
+		Key: "$match",
+		Value: bson.M{
+			"$or":        modulesOr,
+			"is_revised": false,
+			"date_limit": bson.M{
+				"$gte": primitive.NewDateTimeFromTime(time.Now()),
+			},
+		},
+	}}
+	sortA := bson.D{{
+		Key: "$sort",
+		Value: bson.M{
+			"date_limit": 1,
+		},
+	}}
+	project := bson.D{{
+		Key: "$project",
+		Value: bson.M{
+			"title":        1,
+			"is_qualified": 1,
+			"type":         1,
+			"date_start":   1,
+			"date_limit":   1,
+			"date_upload":  1,
+			"module":       1,
+			"_id":          1,
+		},
+	}}
+	cursor, err := workModel.Aggreagate(mongo.Pipeline{
+		match,
+		sortA,
+		project,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := cursor.All(db.Ctx, &works); err != nil {
+		return nil, err
+	}
+	// Get status
+	type WorkStatus struct {
+		Title       string    `json:"title"`
+		IsQualified bool      `json:"is_qualified"`
+		Type        string    `json:"type"`
+		Module      string    `json:"module"`
+		ID          string    `json:"_id"`
+		DateStart   time.Time `json:"date_start"`
+		DateLimit   time.Time `json:"date_limit"`
+		DateUpload  time.Time `json:"date_upload"`
+		Status      int       `json:"status"`
+	}
+	workStatus := make([]WorkStatus, len(works))
+	var wg sync.WaitGroup
+
+	for i, work := range works {
+		wg.Add(1)
+
+		go func(work models.Work, i int, wg *sync.WaitGroup, errRet *error) {
+			defer wg.Done()
+
+			workStatus[i] = WorkStatus{
+				Title:       work.Title,
+				Module:      work.Module.Hex(),
+				ID:          work.ID.Hex(),
+				IsQualified: work.IsQualified,
+				Type:        work.Type,
+				DateStart:   work.DateStart.Time(),
+				DateLimit:   work.DateLimit.Time(),
+				DateUpload:  work.DateUpload.Time(),
+			}
+			if work.Type == "files" {
+				var fUC *models.FileUploadedClassroom
+
+				cursor := fileUCModel.GetOne(bson.D{
+					{
+						Key:   "work",
+						Value: work.ID,
+					},
+					{
+						Key:   "student",
+						Value: idObjUser,
+					},
+				})
+				if err := cursor.Decode(&fUC); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
+					*errRet = err
+					return
+				}
+				if fUC != nil {
+					workStatus[i].Status = 2
+				}
+			} else if work.Type == "form" {
+				var formAccess *models.FormAccess
+
+				cursor := formAccessModel.GetOne(bson.D{
+					{
+						Key:   "work",
+						Value: work.ID,
+					},
+					{
+						Key:   "student",
+						Value: idObjUser,
+					},
+				})
+				if err := cursor.Decode(&formAccess); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
+					*errRet = err
+					return
+				}
+				if formAccess != nil {
+					if formAccess.Status == "finished" {
+						workStatus[i].Status = 2
+					} else if formAccess.Status == "opened" {
+						workStatus[i].Status = 1
+					}
+				}
+			}
+		}(work, i, &wg, &err)
+	}
+	wg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	// Order by status asc
+	sort.Slice(workStatus, func(i, j int) bool {
+		return workStatus[i].Status < workStatus[j].Status
+	})
+	return workStatus, nil
 }
 
 func (w *WorkSerice) GetWorks(idModule string) ([]models.WorkWLookup, error) {
@@ -338,13 +492,18 @@ func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interfac
 		}}
 		if work.IsQualified {
 			var grade []models.GradeWLookup
+
+			matchValue := bson.M{
+				"module":  work.Module,
+				"program": work.Grade.ID,
+				"student": idObjUser,
+			}
+			if work.Grade.IsAcumulative {
+				matchValue["acumulative"] = work.Acumulative
+			}
 			match := bson.D{{
-				Key: "$match",
-				Value: bson.M{
-					"module":  work.Module,
-					"program": work.Grade.ID,
-					"student": idObjUser,
-				},
+				Key:   "$match",
+				Value: matchValue,
 			}}
 			project := bson.D{{
 				Key: "$project",
@@ -412,7 +571,7 @@ func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interfac
 				idObjStudent,
 				idObjWork,
 			)
-			if err != nil && err.Error() != "mongo: no documents in result" {
+			if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 				return nil, err
 			}
 			response["form_access"] = formAccess
@@ -492,9 +651,12 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, err
 	}
 	// Get form
 	form, err := formService.GetForm(work.Form.Hex(), userId, false)
+	if err != nil {
+		return nil, err
+	}
 	// Get form access
 	formAccess, err := w.getAccessFromIdStudentNIdWork(idObjUser, idObjWork)
-	if err != nil && err.Error() != "mongo: no documents in result" {
+	if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 		return nil, err
 	}
 
@@ -528,6 +690,9 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, err
 			Work:    idObjWork,
 			Status:  "opened",
 		}
+	}
+	if formAccess == nil && time.Now().After(work.DateLimit.Time()) {
+		return nil, fmt.Errorf("No accediste al formulario, no hay respuestas a revisar")
 	}
 	var newItems []models.FormItemWLookup
 	// Answers
@@ -577,7 +742,7 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, err
 					questionData = question
 				}
 				answer, err := w.getAnswerStudent(idObjUser, idObjWork, question.ID)
-				if err != nil && err.Error() != "mongo: no documents in result" {
+				if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 					*returnErr = err
 					return
 				}
@@ -743,7 +908,7 @@ func (w *WorkSerice) GetFormStudent(
 	form, err := formService.GetForm(work.Form.Hex(), primitive.NilObjectID.Hex(), false)
 	// Get access student
 	formAccess, err := w.getAccessFromIdStudentNIdWork(idObjStudent, idObjWork)
-	if err != nil && err.Error() != "mongo: no documents in result" {
+	if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 		return nil, nil, err
 	}
 	if formAccess == nil {
@@ -773,7 +938,7 @@ func (w *WorkSerice) GetFormStudent(
 
 				answer, err := w.getAnswerStudent(idObjStudent, idObjWork, question.ID)
 				if err != nil {
-					if err.Error() != "mongo: no documents in result" {
+					if err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
 					}
 					return
@@ -795,7 +960,7 @@ func (w *WorkSerice) GetFormStudent(
 							Value: idObjWork,
 						},
 					})
-					if err := cursor.Decode(&evaluatedAnswer); err != nil && err.Error() != "mongo: no documents in result" {
+					if err := cursor.Decode(&evaluatedAnswer); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
 						return
 					}
@@ -896,7 +1061,7 @@ func (w *WorkSerice) getStudentEvaluate(
 				evaluatedSum += 1
 				lock.Unlock()
 				if err != nil {
-					if err.Error() != "mongo: no documents in result" {
+					if err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
 					}
 					return
@@ -922,7 +1087,7 @@ func (w *WorkSerice) getStudentEvaluate(
 						Value: idWork,
 					},
 				})
-				if err := cursor.Decode(&evaluateAnswer); err != nil && err.Error() != "mongo: no documents in result" {
+				if err := cursor.Decode(&evaluateAnswer); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 					*errRet = err
 					return
 				}
@@ -1055,7 +1220,7 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) (interface{}, in
 					idObjWork,
 				)
 				if err != nil {
-					if err.Error() != "mongo: no documents in result" {
+					if err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
 					}
 					return
@@ -1068,7 +1233,7 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) (interface{}, in
 					idObjWork,
 				)
 				if err != nil {
-					if err.Error() != "mongo: no documents in result" {
+					if err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
 					}
 					return
@@ -1175,6 +1340,59 @@ func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter 
 	return zipWritter, nil
 }
 
+type Grade struct {
+	Acumulative   primitive.ObjectID
+	Grade         primitive.ObjectID
+	IsAcumulative bool
+}
+
+func (w *WorkSerice) verifyGradeWork(idObjModule, idObjGrade primitive.ObjectID) (*Grade, error) {
+	gradeRet := Grade{}
+	// Exists
+	var grade *models.GradesProgram
+	cursor := gradeProgramModel.GetByID(idObjGrade)
+	if err := cursor.Decode(&grade); err != nil {
+		if err.Error() == db.NO_SINGLE_DOCUMENT {
+			cursor = gradeProgramModel.GetOne(bson.D{{
+				Key: "acumulative",
+				Value: bson.M{
+					"$elemMatch": bson.M{
+						"_id": idObjGrade,
+					},
+				},
+			}})
+			if err := cursor.Decode(&grade); err != nil {
+				return nil, fmt.Errorf("No existe la calificación indicada")
+			}
+			gradeRet.Acumulative = idObjGrade
+			gradeRet.Grade = grade.ID
+			gradeRet.IsAcumulative = true
+		} else {
+			return nil, err
+		}
+	}
+	gradeRet.Grade = grade.ID
+	// Not used
+	var work *models.Work
+	cursor = workModel.GetOne(bson.D{
+		{
+			Key:   "module",
+			Value: idObjModule,
+		},
+		{
+			Key:   "grade",
+			Value: idObjGrade,
+		},
+	})
+	if err := cursor.Decode(&work); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
+		return nil, err
+	}
+	if work != nil {
+		return nil, fmt.Errorf("Esta calificación está registrada ya a un trabajo")
+	}
+	return &gradeRet, nil
+}
+
 func (w *WorkSerice) UploadWork(
 	work *forms.WorkForm,
 	idModule string,
@@ -1189,11 +1407,11 @@ func (w *WorkSerice) UploadWork(
 		return err
 	}
 	// Date
-	tStart, err := time.Parse("2006-01-02T15:04:05Z", work.DateStart)
+	tStart, err := time.Parse("2006-01-02 15:04", work.DateStart)
 	if err != nil {
 		return err
 	}
-	tLimit, err := time.Parse("2006-01-02T15:04:05Z", work.DateLimit)
+	tLimit, err := time.Parse("2006-01-02 15:04", work.DateLimit)
 	if err != nil {
 		return err
 	}
@@ -1210,45 +1428,14 @@ func (w *WorkSerice) UploadWork(
 		if err != nil {
 			return err
 		}
-		// Exists
-		var grade *models.GradesProgram
-		cursor := gradeProgramModel.GetByID(idObjGrade)
-		if err := cursor.Decode(&grade); err != nil {
-			if err.Error() == "mongo: no documents in result" {
-				cursor = gradeProgramModel.GetOne(bson.D{{
-					Key: "acumulative",
-					Value: bson.M{
-						"$elemMatch": bson.M{
-							"_id": idObjGrade,
-						},
-					},
-				}})
-				if err := cursor.Decode(&grade); err != nil {
-					return fmt.Errorf("No existe la calificación indicada")
-				}
-				work.Acumulative = idObjGrade
-				work.Grade = grade.ID.Hex()
-			} else {
-				return err
-			}
-		}
-		// Not used
-		var work *models.Work
-		cursor = workModel.GetOne(bson.D{
-			{
-				Key:   "module",
-				Value: idObjModule,
-			},
-			{
-				Key:   "grade",
-				Value: idObjGrade,
-			},
-		})
-		if err := cursor.Decode(&work); err != nil && err.Error() != "mongo: no documents in result" {
+		// Grade
+		grade, err := w.verifyGradeWork(idObjModule, idObjGrade)
+		if err != nil {
 			return err
 		}
-		if work != nil {
-			return fmt.Errorf("Esta calificación está registrada ya a un trabajo")
+		if grade.IsAcumulative {
+			work.Acumulative = idObjGrade
+			work.Grade = grade.Grade.Hex()
 		}
 	}
 	// Form
@@ -1261,6 +1448,9 @@ func (w *WorkSerice) UploadWork(
 		cursor := formModel.GetByID(idObjForm)
 		if err := cursor.Decode(&form); err != nil {
 			return fmt.Errorf("No existe el formulario indicado")
+		}
+		if !form.Status {
+			return fmt.Errorf("Este formulario está eliminado")
 		}
 		if form.Author != idObjUser {
 			return fmt.Errorf("No tienes acceso a este formulario")
@@ -1280,12 +1470,13 @@ func (w *WorkSerice) UploadWork(
 	}
 	// Insert Elasticsearch
 	indexerWork := &models.WorkES{
-		Title:     work.Title,
-		DateStart: tStart,
-		DateLimit: tLimit,
-		Author:    claims.Name,
-		IDModule:  idModule,
-		Published: time.Now(),
+		Title:       work.Title,
+		Description: work.Description,
+		DateStart:   tStart,
+		DateLimit:   tLimit,
+		Author:      claims.Name,
+		IDModule:    idModule,
+		Published:   time.Now(),
 	}
 	data, err := json.Marshal(indexerWork)
 	if err != nil {
@@ -1372,7 +1563,7 @@ func (w *WorkSerice) saveAnswer(
 			Value: idObjQuestion,
 		},
 	})
-	if err := cursor.Decode(&answerData); err != nil && err.Error() != "mongo: no documents in result" {
+	if err := cursor.Decode(&answerData); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 		return err
 	}
 	// Save
@@ -1503,7 +1694,7 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 			Value: idObjUser,
 		},
 	})
-	if err := cursor.Decode(&fUC); err != nil && err.Error() != "mongo: no documents in result" {
+	if err := cursor.Decode(&fUC); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 		return err
 	}
 	if fUC != nil && len(fUC.FilesUploaded)+len(files) > 3 {
@@ -1673,6 +1864,130 @@ func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent st
 	return nil
 }
 
+func (w *WorkSerice) updateGrade(
+	work *models.Work,
+	idObjStudent,
+	idObjEvaluator primitive.ObjectID,
+	points int,
+) error {
+	var maxPoints int
+	if work.Type == "form" {
+		questions, err := w.getQuestionsFromIdForm(work.Form)
+		if err != nil {
+			return err
+		}
+		// MAX Points
+		var questionsWPoints []models.ItemQuestion
+		var maxPoints int
+		for _, question := range questions {
+			if question.Type != "alternatives" {
+				maxPoints += question.Points
+				questionsWPoints = append(questionsWPoints, question)
+			}
+		}
+		// Points
+		points, _, err = w.getStudentEvaluate(
+			questions,
+			idObjStudent,
+			work.ID,
+		)
+		if err != nil {
+			return err
+		}
+	} else if work.Type == "files" {
+		for _, item := range work.Pattern {
+			maxPoints += item.Points
+		}
+	}
+	// Update grade
+	min, max, err := GetMinNMaxGrade()
+	if err != nil {
+		return err
+	}
+	var scale float32 = float32(max-min) / float32(maxPoints)
+	grade := w.TransformPointsToGrade(
+		scale,
+		min,
+		points,
+	)
+	if work.IsQualified {
+		// Get grade
+		var gradeD *models.GradesProgram
+		cursor := gradeProgramModel.GetByID(work.Grade)
+		if err := cursor.Decode(&gradeD); err != nil {
+			return nil
+		}
+
+		// Generate models
+		match := bson.D{
+			{
+				Key:   "module",
+				Value: work.Module,
+			},
+			{
+				Key:   "student",
+				Value: idObjStudent,
+			},
+			{
+				Key:   "program",
+				Value: work.Grade,
+			},
+		}
+		if gradeD.IsAcumulative {
+			match = append(match, bson.E{
+				Key:   "acumulative",
+				Value: work.Acumulative,
+			})
+		}
+
+		_, err = gradeModel.Use().UpdateOne(
+			db.Ctx,
+			match,
+			bson.D{{
+				Key: "$set",
+				Value: bson.M{
+					"grade":     grade,
+					"date":      primitive.NewDateTimeFromTime(time.Now()),
+					"evaluator": idObjEvaluator,
+				},
+			}},
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = workGradeModel.Use().UpdateOne(
+			db.Ctx,
+			bson.D{
+				{
+					Key:   "module",
+					Value: work.Module,
+				},
+				{
+					Key:   "student",
+					Value: idObjStudent,
+				},
+				{
+					Key:   "work",
+					Value: work.ID,
+				},
+			},
+			bson.D{{
+				Key: "$set",
+				Value: bson.M{
+					"grade":     grade,
+					"date":      primitive.NewDateTimeFromTime(time.Now()),
+					"evaluator": idObjEvaluator,
+				},
+			}},
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (w *WorkSerice) UploadPointsStudent(
 	points int,
 	idEvaluator,
@@ -1745,7 +2060,7 @@ func (w *WorkSerice) UploadPointsStudent(
 			Value: idObjStudent,
 		},
 	})
-	if err := cursor.Decode(&evaluatedAnswer); err != nil && err.Error() != "mongo: no documents in result" {
+	if err := cursor.Decode(&evaluatedAnswer); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 		return err
 	}
 	// Upload points
@@ -1773,15 +2088,32 @@ func (w *WorkSerice) UploadPointsStudent(
 			return err
 		}
 	}
+	// Grade
+	if work.IsRevised {
+		err = w.updateGrade(work, idObjStudent, idObjEvaluator, 0)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (w *WorkSerice) UploadEvaluateFiles(evalute []forms.EvaluateFilesForm, idWork, idStudent string) error {
+func (w *WorkSerice) UploadEvaluateFiles(
+	evalute []forms.EvaluateFilesForm,
+	idWork,
+	idEvaluator,
+	idStudent string,
+	reavaluate bool,
+) error {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return err
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
+	if err != nil {
+		return err
+	}
+	idObjEvaluator, err := primitive.ObjectIDFromHex(idEvaluator)
 	if err != nil {
 		return err
 	}
@@ -1797,7 +2129,7 @@ func (w *WorkSerice) UploadEvaluateFiles(evalute []forms.EvaluateFilesForm, idWo
 	if now.Before(work.DateLimit.Time()) {
 		return fmt.Errorf("Todavía no se puede evaluar el trabajo")
 	}
-	if work.IsRevised {
+	if !reavaluate && work.IsRevised {
 		return fmt.Errorf("Ya no se puede actualizar el puntaje del alumno")
 	}
 	// Get evaluate student
@@ -1881,7 +2213,7 @@ func (w *WorkSerice) UploadEvaluateFiles(evalute []forms.EvaluateFilesForm, idWo
 			}
 		}
 	}
-	if len(evaluateFiles) > 0 {
+	if !reavaluate && len(evaluateFiles) > 0 {
 		_, err = fileUCModel.Use().UpdateByID(db.Ctx, fUC.ID, bson.D{{
 			Key: "$push",
 			Value: bson.M{
@@ -1890,6 +2222,15 @@ func (w *WorkSerice) UploadEvaluateFiles(evalute []forms.EvaluateFilesForm, idWo
 				},
 			},
 		}})
+		if err != nil {
+			return err
+		}
+	} else if reavaluate {
+		points := 0
+		for _, eva := range evalute {
+			points += *eva.Points
+		}
+		err = w.updateGrade(work, idObjStudent, idObjEvaluator, points)
 		if err != nil {
 			return err
 		}
@@ -1905,6 +2246,84 @@ func (w *WorkSerice) TransformPointsToGrade(
 	grade := (scale * float32(points)) + float32(minGrade)
 	finalGrade := math.Round(float64(grade)*10) / 10
 	return finalGrade
+}
+
+type StudentGrades struct {
+	ID          primitive.ObjectID
+	Grade       float64
+	ExistsGrade bool
+}
+
+func (w *WorkSerice) gradeEvaluatedWork(
+	studentsGrade []StudentGrades,
+	work *models.Work,
+	idObjUser primitive.ObjectID,
+	program *models.GradesProgram,
+) error {
+	type UpdateGrade struct {
+		Student primitive.ObjectID
+		Grade   float64
+	}
+	// Generate models
+	var modelsGrades []interface{}
+	var updates []UpdateGrade
+	for _, student := range studentsGrade {
+		if !student.ExistsGrade {
+			modelGrade := models.NewModelGrade(
+				work.Module,
+				student.ID,
+				work.Acumulative,
+				work.Grade,
+				idObjUser,
+				student.Grade,
+				program.IsAcumulative,
+			)
+			modelsGrades = append(modelsGrades, modelGrade)
+		} else {
+			updates = append(updates, UpdateGrade{
+				Student: student.ID,
+				Grade:   student.Grade,
+			})
+		}
+	}
+	// Insert grades
+	_, err := gradeModel.Use().InsertMany(db.Ctx, modelsGrades)
+	if err != nil {
+		return err
+	}
+	// Update grades
+	for _, update := range updates {
+		filter := bson.D{
+			{
+				Key:   "module",
+				Value: work.Module,
+			},
+			{
+				Key:   "student",
+				Value: update.Student,
+			},
+			{
+				Key:   "program",
+				Value: program.ID,
+			},
+		}
+		if program.IsAcumulative {
+			filter = append(filter, bson.E{
+				Key:   "acumulative",
+				Value: program.Acumulative,
+			})
+		}
+		_, err = gradeModel.Use().UpdateOne(db.Ctx, filter, bson.D{{
+			Key: "$set",
+			Value: bson.M{
+				"grade": update.Grade,
+			},
+		}})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *WorkSerice) GradeForm(idWork, idUser string) error {
@@ -1947,6 +2366,12 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 	if len(students) == 0 {
 		return fmt.Errorf("No existen alumnos a evaluar en este trabajo")
 	}
+	// Get grade program
+	var program *models.GradesProgram
+	cursor = gradeProgramModel.GetByID(work.Grade)
+	if err := cursor.Decode(&program); err != nil {
+		return nil
+	}
 	// Get questions form
 	var questionsWPoints []models.ItemQuestion
 	questions, err := w.getQuestionsFromIdForm(work.Form)
@@ -1960,8 +2385,9 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 	}
 	// Get evaluted students
 	type StudentPoints struct {
-		ID     primitive.ObjectID
-		Points int
+		ID          primitive.ObjectID
+		Points      int
+		ExistsGrade bool
 	}
 	var studentsPoints []StudentPoints
 	// To add evaluated status
@@ -1979,21 +2405,49 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 				*errRet = err
 				return
 			}
+			// Get grade if exists
+			var grade *models.Grade
+			match := bson.D{
+				{
+					Key:   "module",
+					Value: work.Module,
+				},
+				{
+					Key:   "student",
+					Value: idObjStudent,
+				},
+				{
+					Key:   "program",
+					Value: work.Grade,
+				},
+			}
+			if program.IsAcumulative {
+				match = append(match, bson.E{
+					Key:   "acumulative",
+					Value: work.Acumulative,
+				})
+			}
+			cursor = gradeModel.GetOne(match)
+			if err := cursor.Decode(&grade); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
+				*errRet = err
+				return
+			}
 			// Get form access
 			_, err = w.getAccessFromIdStudentNIdWork(
 				idObjStudent,
 				idObjWork,
 			)
 			if err != nil {
-				if err.Error() != "mongo: no documents in result" {
+				if err.Error() != db.NO_SINGLE_DOCUMENT {
 					*errRet = err
 					return
 				}
 				lock.Lock()
 				studentsWithoutAccess = append(studentsWithoutAccess, idObjStudent)
 				studentsPoints = append(studentsPoints, StudentPoints{
-					ID:     idObjStudent,
-					Points: 0,
+					ID:          idObjStudent,
+					Points:      0,
+					ExistsGrade: grade != nil,
 				})
 				lock.Unlock()
 				return
@@ -2014,8 +2468,9 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 			}
 			lock.Lock()
 			studentsPoints = append(studentsPoints, StudentPoints{
-				ID:     idObjStudent,
-				Points: points,
+				ID:          idObjStudent,
+				Points:      points,
+				ExistsGrade: grade != nil,
 			})
 			lock.Unlock()
 		}(student, &wg, &lock, &err)
@@ -2030,10 +2485,6 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 		return err
 	}
 	// Transform grades
-	type StudentGrades struct {
-		ID    primitive.ObjectID
-		Grade float64
-	}
 	var studentsGrade []StudentGrades
 	var maxPoints int
 	for _, question := range questionsWPoints {
@@ -2048,8 +2499,9 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 			student.Points,
 		)
 		studentsGrade = append(studentsGrade, StudentGrades{
-			ID:    student.ID,
-			Grade: grade,
+			ID:          student.ID,
+			Grade:       grade,
+			ExistsGrade: student.ExistsGrade,
 		})
 	}
 	// Update and insert status
@@ -2093,32 +2545,14 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 	if err != nil {
 		return err
 	}
-	// Insert grades
+	// Insert and update grades
 	if work.IsQualified {
-		// Get grade
-		isAcumulative := false
-		var grade *models.Grade
-		cursor := gradeModel.GetByID(work.Grade)
-		if err := cursor.Decode(&grade); err != nil {
-			if err.Error() != "mongo: no documents in result" {
-				return nil
-			}
-			isAcumulative = true
-		}
-		// Generate models
-		var modelsGrades []interface{}
-		for _, student := range studentsGrade {
-			modelGrade := models.NewModelGrade(
-				work.Module,
-				student.ID,
-				work.Grade,
-				idObjUser,
-				student.Grade,
-				isAcumulative,
-			)
-			modelsGrades = append(modelsGrades, modelGrade)
-		}
-		_, err = gradeModel.Use().InsertMany(db.Ctx, modelsGrades)
+		err = w.gradeEvaluatedWork(
+			studentsGrade,
+			work,
+			idObjUser,
+			program,
+		)
 		if err != nil {
 			return err
 		}
@@ -2165,6 +2599,12 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 	if work.IsRevised {
 		return fmt.Errorf("Este trabajo ya está evaluado")
 	}
+	// Get grade program
+	var program *models.GradesProgram
+	cursor := gradeProgramModel.GetByID(work.Grade)
+	if err := cursor.Decode(&program); err != nil {
+		return nil
+	}
 	// Get student
 	students, err := w.getStudentsFromIdModule(work.Module.Hex())
 	if err != nil {
@@ -2175,8 +2615,9 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 	}
 	// Get points student
 	type StudentPoints struct {
-		Student primitive.ObjectID
-		Points  int
+		Student     primitive.ObjectID
+		Points      int
+		ExistsGrade bool
 	}
 
 	var studentsPoints []StudentPoints
@@ -2189,6 +2630,33 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 
 			idObjStudent, err := primitive.ObjectIDFromHex(student.User.ID)
 			if err != nil {
+				*errRet = err
+				return
+			}
+			// Get grade if exists
+			var grade *models.Grade
+			match := bson.D{
+				{
+					Key:   "module",
+					Value: work.Module,
+				},
+				{
+					Key:   "student",
+					Value: idObjStudent,
+				},
+				{
+					Key:   "program",
+					Value: work.Grade,
+				},
+			}
+			if program.IsAcumulative {
+				match = append(match, bson.E{
+					Key:   "acumulative",
+					Value: work.Acumulative,
+				})
+			}
+			cursor = gradeModel.GetOne(match)
+			if err := cursor.Decode(&grade); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 				*errRet = err
 				return
 			}
@@ -2205,11 +2673,12 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 				},
 			})
 			if err := cursor.Decode(&fUC); err != nil {
-				if err.Error() != "mongo: no documents in result" {
+				if err.Error() != db.NO_SINGLE_DOCUMENT {
 					lock.Lock()
 					studentsPoints = append(studentsPoints, StudentPoints{
-						Student: idObjStudent,
-						Points:  0,
+						Student:     idObjStudent,
+						Points:      0,
+						ExistsGrade: grade != nil,
 					})
 					lock.Unlock()
 					*errRet = err
@@ -2229,8 +2698,9 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 
 			lock.Lock()
 			studentsPoints = append(studentsPoints, StudentPoints{
-				Student: idObjStudent,
-				Points:  points,
+				Student:     idObjStudent,
+				Points:      points,
+				ExistsGrade: grade != nil,
 			})
 			lock.Unlock()
 		}(student, &wg, &lock, &err)
@@ -2245,10 +2715,6 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 		return err
 	}
 	// Transform grades
-	type StudentGrades struct {
-		ID    primitive.ObjectID
-		Grade float64
-	}
 	var studentsGrade []StudentGrades
 	var maxPoints int
 	for _, item := range work.Pattern {
@@ -2279,30 +2745,12 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 	}
 	// Insert grades
 	if work.IsQualified {
-		// Get grade
-		isAcumulative := false
-		var grade *models.Grade
-		cursor := gradeModel.GetByID(work.Grade)
-		if err := cursor.Decode(&grade); err != nil {
-			if err.Error() != "mongo: no documents in result" {
-				return nil
-			}
-			isAcumulative = true
-		}
-		// Generate models
-		var modelsGrades []interface{}
-		for _, student := range studentsGrade {
-			modelGrade := models.NewModelGrade(
-				work.Module,
-				student.ID,
-				work.Grade,
-				idObjUser,
-				student.Grade,
-				isAcumulative,
-			)
-			modelsGrades = append(modelsGrades, modelGrade)
-		}
-		_, err = gradeModel.Use().InsertMany(db.Ctx, modelsGrades)
+		err = w.gradeEvaluatedWork(
+			studentsGrade,
+			work,
+			idObjUser,
+			program,
+		)
 		if err != nil {
 			return err
 		}
@@ -2322,6 +2770,286 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser string) error {
+	idObjWork, err := primitive.ObjectIDFromHex(idWork)
+	if err != nil {
+		return err
+	}
+	idObjUser, err := primitive.ObjectIDFromHex(idUser)
+	if err != nil {
+		return err
+	}
+	// Get work
+	workData, err := w.getWorkFromId(idObjWork)
+	if err != nil {
+		return err
+	}
+	if workData.IsRevised {
+		return fmt.Errorf("Ya no se puede editar este trabajo")
+	}
+	// Update work
+	update := bson.M{}
+	var updateEs map[string]interface{}
+	unset := bson.M{}
+	if work.Title != "" {
+		update["title"] = work.Title
+		updateEs["title"] = work.Title
+	}
+	if work.Description != "" {
+		update["description"] = work.Description
+		updateEs["description"] = work.Description
+	}
+	if workData.IsQualified && work.Grade != "" {
+		idObjGrade, err := primitive.ObjectIDFromHex(work.Grade)
+		if err != nil {
+			return err
+		}
+		// Grade
+		grade, err := w.verifyGradeWork(workData.Module, idObjGrade)
+		if err != nil {
+			return err
+		}
+		if grade.IsAcumulative {
+			update["grade"] = grade.Grade
+			update["acumulative"] = grade.Acumulative
+		} else {
+			update["grade"] = grade.Grade
+			unset["acumulative"] = ""
+		}
+	}
+	now := time.Now()
+	if workData.Type == "files" && now.Before(workData.DateStart.Time()) {
+		var pattern []models.WorkPattern
+
+		for _, item := range work.Pattern {
+			var itemAdd models.WorkPattern
+			if item.ID != "" {
+				idObjItem, err := primitive.ObjectIDFromHex(item.ID)
+				if err != nil {
+					return err
+				}
+				var find bool
+				for _, itemData := range workData.Pattern {
+					if itemData.ID == idObjItem {
+						find = true
+						break
+					}
+				}
+				if !find {
+					return fmt.Errorf("No se puede actualizar un item que no está registrado")
+				}
+				itemAdd.ID = idObjItem
+			}
+			itemAdd.Title = item.Title
+			itemAdd.Description = item.Description
+			itemAdd.Points = item.Points
+			pattern = append(pattern, itemAdd)
+		}
+		update["pattern"] = pattern
+	} else if workData.Type == "form" && now.Before(workData.DateStart.Time()) {
+		if work.Form != "" {
+			idObjForm, err := primitive.ObjectIDFromHex(work.Form)
+			if err != nil {
+				return err
+			}
+			form, err := formService.GetFormById(idObjForm)
+			if err != nil {
+				return err
+			}
+			if !form.Status {
+				return fmt.Errorf("Este formulario está eliminado")
+			}
+			if form.Author != idObjUser {
+				return fmt.Errorf("Este formulario no te pertenece")
+			}
+			if !form.HasPoints && workData.IsQualified {
+				return fmt.Errorf("Un trabajo evaluado no puede tener un formulario sin puntaje")
+			}
+			update["form"] = idObjForm
+		}
+		if work.FormAccess != "" {
+			update["form_access"] = work.FormAccess
+		}
+		if work.TimeFormAccess != 0 {
+			update["time_access"] = work.TimeFormAccess
+		}
+	}
+	// Attached
+	var attached []models.Attached
+	for _, att := range work.Attached {
+		attachedModel := models.Attached{
+			ID:   primitive.NewObjectID(),
+			Type: att.Type,
+		}
+		if att.Type == "link" {
+			attachedModel.Link = att.Link
+			attachedModel.Title = att.Title
+		} else {
+			idObjFile, err := primitive.ObjectIDFromHex(att.File)
+			if err != nil {
+				return err
+			}
+			attachedModel.File = idObjFile
+		}
+		attached = append(attached, attachedModel)
+	}
+	update["attached"] = attached
+	// Date
+	var tStart time.Time
+	var tLimit time.Time
+	if now.Before(workData.DateStart.Time()) && work.DateStart != "" {
+		tStart, err := time.Parse("2006-01-02 15:04", work.DateStart)
+		if err != nil {
+			return err
+		}
+		toDateTime := primitive.NewDateTimeFromTime(tStart)
+		update["date_start"] = toDateTime
+		updateEs["date_start"] = toDateTime
+	}
+	if work.DateLimit != "" {
+		tLimit, err := time.Parse("2006-01-02 15:04", work.DateLimit)
+		if err != nil {
+			return err
+		}
+		toDateTime := primitive.NewDateTimeFromTime(tLimit)
+		update["date_limit"] = toDateTime
+		updateEs["date_limit"] = toDateTime
+	}
+	if !tStart.IsZero() && !tLimit.IsZero() && tStart.After(tLimit) {
+		return fmt.Errorf("La fecha y hora de inicio es mayor a la limite")
+	}
+	if !tStart.IsZero() && tLimit.IsZero() && tStart.After(workData.DateLimit.Time()) {
+		return fmt.Errorf("La fecha y hora de inicio es mayor a la limite registrada")
+	}
+	if !tLimit.IsZero() && tStart.IsZero() && workData.DateStart.Time().After(tLimit) {
+		return fmt.Errorf("La fecha y hora de inicio registrada es mayor a la limite")
+	}
+	update["date_update"] = primitive.NewDateTimeFromTime(now)
+	// Update work
+	// Update ES
+	data, err := json.Marshal(updateEs)
+	bi, err := models.NewBulkWork()
+	if err != nil {
+		return err
+	}
+	err = bi.Add(
+		context.Background(),
+		esutil.BulkIndexerItem{
+			Action:     "update",
+			DocumentID: idWork,
+			Body:       bytes.NewReader([]byte(fmt.Sprintf(`{"doc":%s}`, data))),
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if err := bi.Close(context.Background()); err != nil {
+		return err
+	}
+	// Update DB
+	_, err = workModel.Use().UpdateByID(db.Ctx, idObjWork, bson.D{
+		{
+			Key:   "$set",
+			Value: update,
+		},
+		{
+			Key:   "$unset",
+			Value: unset,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *WorkSerice) DeleteWork(idWork string) error {
+	idObjWork, err := primitive.ObjectIDFromHex(idWork)
+	if err != nil {
+		return err
+	}
+	// Get work
+	work, err := w.getWorkFromId(idObjWork)
+	if err != nil {
+		return err
+	}
+	if work.IsRevised {
+		return fmt.Errorf("No se puede eliminar un trabajo calificado")
+	}
+	// Delete references
+	filter := bson.D{{
+		Key:   "work",
+		Value: idObjWork,
+	}}
+	if work.Type == "files" {
+		var fUCs []models.FileUploadedClassroom
+		cursor, err := fileUCModel.GetAll(filter, &options.FindOptions{})
+		if err != nil {
+			return err
+		}
+		if err := cursor.All(db.Ctx, &fUCs); err != nil {
+			return err
+		}
+		// Files to delete
+		var files []string
+		for _, fUC := range fUCs {
+			for _, file := range fUC.FilesUploaded {
+				files = append(files, file.Hex())
+			}
+		}
+		if len(files) > 0 {
+			err = nats.PublishEncode("delete_files", files)
+			if err != nil {
+				return err
+			}
+		}
+		_, err = fileUCModel.Use().DeleteMany(db.Ctx, filter)
+		if err != nil {
+			return err
+		}
+	} else if work.Type == "form" {
+		_, err = answerModel.Use().DeleteMany(db.Ctx, filter)
+		if err != nil {
+			return err
+		}
+		_, err = evaluatedAnswersModel.Use().DeleteMany(db.Ctx, filter)
+		if err != nil {
+			return err
+		}
+		_, err = formAccessModel.Use().DeleteMany(db.Ctx, filter)
+		if err != nil {
+			return err
+		}
+	}
+	// Delete work ElasticSearch
+	bi, err := models.NewBulkWork()
+	if err != nil {
+		return err
+	}
+	err = bi.Add(
+		context.Background(),
+		esutil.BulkIndexerItem{
+			Action:     "delete",
+			DocumentID: idWork,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if err := bi.Close(context.Background()); err != nil {
+		return err
+	}
+	// Delete work
+	_, err = workModel.Use().DeleteOne(db.Ctx, bson.D{{
+		Key:   "_id",
+		Value: idObjWork,
+	}})
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -2397,6 +3125,87 @@ func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) error {
 		return fmt.Errorf("No se encontró el archivo a eliminar en este trabajo")
 	}
 	return nil
+}
+
+func (w *WorkSerice) DeleteAttached(idWork, idAttached string) error {
+	idObjWork, err := primitive.ObjectIDFromHex(idWork)
+	if err != nil {
+		return err
+	}
+	idObjAttached, err := primitive.ObjectIDFromHex(idAttached)
+	if err != nil {
+		return err
+	}
+	// Get work
+	work, err := w.getWorkFromId(idObjWork)
+	if err != nil {
+		return err
+	}
+	if work.IsRevised {
+		return fmt.Errorf("Ya no se puede editar este trabajo")
+	}
+	// Delete attached
+	for _, attached := range work.Attached {
+		if attached.ID == idObjAttached {
+			_, err = workModel.Use().UpdateByID(
+				db.Ctx,
+				idObjWork,
+				bson.D{{
+					Key: "$pull",
+					Value: bson.M{
+						"attached": bson.M{
+							"_id": idObjAttached,
+						},
+					},
+				}},
+			)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("No existe este elemento adjunto al trabajo")
+}
+
+func (w *WorkSerice) DeleteItemPattern(idWork, idItem string) error {
+	idObjWork, err := primitive.ObjectIDFromHex(idWork)
+	if err != nil {
+		return err
+	}
+	idObjItem, err := primitive.ObjectIDFromHex(idItem)
+	if err != nil {
+		return err
+	}
+	// Get work
+	work, err := w.getWorkFromId(idObjWork)
+	if err != nil {
+		return err
+	}
+	if work.Type != "files" {
+		return fmt.Errorf("Este no es un trabajo de archivos")
+	}
+	if work.IsRevised {
+		return fmt.Errorf("Este trabajo ya no se puede editar")
+	}
+	// Delete item
+	for _, item := range work.Pattern {
+		if item.ID == idObjItem {
+			_, err := workModel.Use().UpdateByID(db.Ctx, idObjWork, bson.D{{
+				Key: "$pull",
+				Value: bson.M{
+					"pattern": bson.M{
+						"_id": idObjItem,
+					},
+				},
+			}})
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("No existe el item a eliminar")
 }
 
 func NewWorksService() *WorkSerice {
