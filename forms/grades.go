@@ -12,3 +12,13 @@ type GradeProgramForm struct {
 	IsAcumulative *bool             `json:"is_acumulative" binding:"required"`
 	Acumulative   []AcumulativeForm `json:"acumulative" binding:"dive"`
 }
+
+type GradeForm struct {
+	Grade       *float64 `json:"grade" binding:"required"`
+	Program     string   `json:"program" binding:"required"`
+	Acumulative string   `json:"acumulative"`
+}
+
+type UpdateGradeForm struct {
+	Grade *float64 `json:"grade" binding:"required"`
+}
