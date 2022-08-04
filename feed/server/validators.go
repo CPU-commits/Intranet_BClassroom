@@ -12,5 +12,6 @@ func InitValidators() {
 		v.RegisterValidation("questionType", forms.QuestionType)
 		v.RegisterValidation("workType", forms.WorkType)
 		v.RegisterValidation("formAccessType", forms.FormAccessType)
+		v.RegisterValidation("formAccessTypeUp", forms.FormAccessTypeUpdate)
 	}
 }

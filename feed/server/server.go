@@ -107,6 +107,21 @@ func Init() {
 			middlewares.AuthorizedRouteModule(),
 			gradesController.UploadProgramGrade,
 		)
+		grade.POST(
+			"/upload_grade/:idModule/:idStudent",
+			middlewares.AuthorizedRouteModule(),
+			gradesController.UploadGrade,
+		)
+		grade.PUT(
+			"/update_grade/:idModule/:idGrade",
+			middlewares.AuthorizedRouteModule(),
+			gradesController.UpdateGrade,
+		)
+		grade.DELETE(
+			"/delete_program/:idModule/:idProgram",
+			middlewares.AuthorizedRouteModule(),
+			gradesController.DeleteGradeProgram,
+		)
 		// Works
 		work.POST(
 			"/upload_work/:idModule",
@@ -156,11 +171,41 @@ func Init() {
 			middlewares.AuthorizedRouteModule(),
 			worksController.UploadEvaluateFiles,
 		)
+		work.POST(
+			"/upload_reevaluate_files/:idWork/:idStudent",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.UploadReEvaluateFiles,
+		)
+		work.PUT(
+			"/update_work/:idWork",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.UpdateWork,
+		)
+		work.DELETE(
+			"/delete_work/:idWork",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.DeleteWork,
+		)
 		work.DELETE(
 			"/delete_file_work/:idWork/:idFile",
 			middlewares.RolesMiddleware(studentRol),
 			middlewares.AuthorizedRouteModule(),
 			worksController.DeleteFileClassroom,
+		)
+		work.DELETE(
+			"/delete_attached/:idWork/:idAttached",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.DeleteAttached,
+		)
+		work.DELETE(
+			"/delete_item_pattern/:idWork/:idItem",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.DeleteItemPattern,
 		)
 	}
 	// No route
