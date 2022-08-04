@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -43,4 +44,16 @@ func NewConnectionEs() (*elasticsearch.Client, error) {
 		return nil, err
 	}
 	return es, nil
+}
+
+// Construct Query
+func ConstructQuery(q string) *strings.Reader {
+	var query = `{"query": {`
+
+	query += fmt.Sprintf("%s}}", q)
+
+	var b strings.Builder
+	b.WriteString(query)
+	read := strings.NewReader(b.String())
+	return read
 }
