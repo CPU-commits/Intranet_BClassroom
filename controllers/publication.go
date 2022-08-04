@@ -65,6 +65,27 @@ func (publication *PublicationController) GetPublications(c *gin.Context) {
 	})
 }
 
+func (p *PublicationController) GetPublication(c *gin.Context) {
+	idModule := c.Param("idModule")
+	idPublication := c.Param("idPublication")
+	// Get
+	publication, err := publicationService.GetPublication(idModule, idPublication)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Response
+	response := make(map[string]interface{})
+	response["publication"] = publication
+	c.JSON(200, &res.Response{
+		Success: true,
+		Data:    response,
+	})
+}
+
 // Feed
 func (publication *PublicationController) NewPublication(c *gin.Context) {
 	idModule := c.Param("idModule")

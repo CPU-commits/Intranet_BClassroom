@@ -53,7 +53,7 @@ func (modules *ModulesController) GetModules(c *gin.Context) {
 		})
 		return
 	}
-	modulesData, err := moduleService.GetModules(courses, claims.UserType)
+	modulesData, err := moduleService.GetModules(courses, claims.UserType, false)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, res.Response{
 			Success: false,
@@ -64,6 +64,26 @@ func (modules *ModulesController) GetModules(c *gin.Context) {
 	// Response
 	response := make(map[string]interface{})
 	response["modules"] = modulesData
+	c.JSON(200, res.Response{
+		Success: true,
+		Data:    response,
+	})
+}
+
+func (modules *ModulesController) Search(c *gin.Context) {
+	idModule := c.Param("idModule")
+	search := c.DefaultQuery("search", "")
+	hits, err := moduleService.Search(idModule, search)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Response
+	response := make(map[string]interface{})
+	response["hits"] = hits
 	c.JSON(200, res.Response{
 		Success: true,
 		Data:    response,

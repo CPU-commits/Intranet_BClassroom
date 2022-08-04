@@ -16,6 +16,26 @@ var workService = services.NewWorksService()
 type WorkController struct{}
 
 // Query
+func (w *WorkController) GetModulesWorks(c *gin.Context) {
+	claims, _ := services.NewClaimsFromContext(c)
+	// Get
+	works, err := workService.GetModulesWorks(*claims)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Response
+	response := make(map[string]interface{})
+	response["works"] = works
+	c.JSON(200, &res.Response{
+		Success: true,
+		Data:    response,
+	})
+}
+
 func (w *WorkController) GetWorks(c *gin.Context) {
 	idModule := c.Param("idModule")
 	// Get
@@ -277,6 +297,7 @@ func (w *WorkController) UploadPointsQuestion(c *gin.Context) {
 
 func (w *WorkController) UploadEvaluateFiles(c *gin.Context) {
 	var evaluate []forms.EvaluateFilesForm
+	claims, _ := services.NewClaimsFromContext(c)
 	idWork := c.Param("idWork")
 	idStudent := c.Param("idStudent")
 	if err := c.BindJSON(&evaluate); err != nil {
@@ -287,7 +308,58 @@ func (w *WorkController) UploadEvaluateFiles(c *gin.Context) {
 		return
 	}
 	// Upload
-	err := workService.UploadEvaluateFiles(evaluate, idWork, idStudent)
+	err := workService.UploadEvaluateFiles(evaluate, idWork, claims.ID, idStudent, false)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
+func (w *WorkController) UploadReEvaluateFiles(c *gin.Context) {
+	var evaluate []forms.EvaluateFilesForm
+	idWork := c.Param("idWork")
+	idStudent := c.Param("idStudent")
+	claims, _ := services.NewClaimsFromContext(c)
+	if err := c.BindJSON(&evaluate); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Upload
+	err := workService.UploadEvaluateFiles(evaluate, idWork, claims.ID, idStudent, true)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
+func (w *WorkController) UpdateWork(c *gin.Context) {
+	var work *forms.UpdateWorkForm
+	idWork := c.Param("idWork")
+	claims, _ := services.NewClaimsFromContext(c)
+	if err := c.BindJSON(&work); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Update work
+	err := workService.UpdateWork(work, idWork, claims.ID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
 			Success: false,
@@ -334,12 +406,62 @@ func (w *WorkController) GradeFiles(c *gin.Context) {
 	})
 }
 
+func (w *WorkController) DeleteWork(c *gin.Context) {
+	idWork := c.Param("idWork")
+	// Delete work
+	err := workService.DeleteWork(idWork)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
 func (w *WorkController) DeleteFileClassroom(c *gin.Context) {
 	claims, _ := services.NewClaimsFromContext(c)
 	idWork := c.Param("idWork")
 	idFile := c.Param("idFile")
 	// Delete file
 	err := workService.DeleteFileClassroom(idWork, idFile, claims.ID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
+func (w *WorkController) DeleteAttached(c *gin.Context) {
+	idWork := c.Param("idWork")
+	idAttached := c.Param("idAttached")
+	// Delete
+	err := workService.DeleteAttached(idWork, idAttached)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
+func (w *WorkController) DeleteItemPattern(c *gin.Context) {
+	idWork := c.Param("idWork")
+	idItem := c.Param("idItem")
+	// Delete
+	err := workService.DeleteItemPattern(idWork, idItem)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
 			Success: false,
