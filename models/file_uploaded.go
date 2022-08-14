@@ -110,7 +110,7 @@ func init() {
 			"work":    bson.M{"bsonType": "objectId"},
 			"student": bson.M{"bsonType": "objectId"},
 			"date":    bson.M{"bsonType": "date"},
-			"attached": bson.M{
+			"files_uploaded": bson.M{
 				"bsonType": bson.A{"array"},
 				"items": bson.M{
 					"bsonType": "objectId",

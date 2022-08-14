@@ -41,7 +41,8 @@ type WorkGradesModel struct {
 func NewModelWorkGrade(
 	module,
 	student,
-	evaluator primitive.ObjectID,
+	evaluator,
+	work primitive.ObjectID,
 	grade float64,
 ) WorkGrade {
 	return WorkGrade{
@@ -50,6 +51,7 @@ func NewModelWorkGrade(
 		Evaluator: evaluator,
 		Grade:     grade,
 		Date:      primitive.NewDateTimeFromTime(time.Now()),
+		Work:      work,
 	}
 }
 

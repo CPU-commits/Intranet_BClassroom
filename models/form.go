@@ -30,7 +30,7 @@ type ItemQuestion struct {
 type FormItem struct {
 	ID         primitive.ObjectID   `json:"_id" bson:"_id,omitempty"`
 	Title      string               `json:"title" bson:"title"`
-	PointsType string               `json:"points_type,omiempty" bson:"points_type,omiempty"`
+	PointsType string               `json:"points_type,omitempty" bson:"points_type,omiempty"`
 	Questions  []primitive.ObjectID `json:"questions" bson:"questions"`
 }
 
@@ -49,7 +49,7 @@ type Form struct {
 type FormItemWLookup struct {
 	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
 	Title      string             `json:"title" bson:"title"`
-	PointsType string             `json:"points_type,omiempty" bson:"points_type,omiempty"`
+	PointsType string             `json:"points_type,omitempty" bson:"points_type,omitempty"`
 	Questions  []ItemQuestion     `json:"questions" bson:"questions"`
 }
 
