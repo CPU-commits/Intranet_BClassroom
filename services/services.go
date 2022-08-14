@@ -1,9 +1,13 @@
 package services
 
 import (
+	"encoding/json"
+
 	"github.com/CPU-commits/Intranet_BClassroom/aws_s3"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/settings"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
+	"github.com/google/uuid"
 )
 
 // Models
@@ -26,3 +30,23 @@ var fileUCModel = models.NewFileUCModel()
 // Packages
 var nats = stack.NewNats()
 var aws = aws_s3.NewAWSS3()
+
+// Settings
+var settingsData = settings.GetSettings()
+
+func formatRequestToNestjsNats(data interface{}) ([]byte, error) {
+	id, err := uuid.NewUUID()
+	if err != nil {
+		return nil, err
+	}
+	request := make(map[string]interface{})
+	request["id"] = id.String()
+	if data != nil {
+		request["data"] = data
+	}
+	jsonMarshal, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	return jsonMarshal, nil
+}

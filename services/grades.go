@@ -1,15 +1,19 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/stack"
+	"github.com/jung-kurt/gofpdf"
 	"github.com/xuri/excelize/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -371,6 +375,84 @@ func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.Fi
 	return file, nil
 }
 
+func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
+	pdf := gofpdf.New("L", "mm", "A4", "")
+	pdf.AddUTF8Font("times_utf8", "", "./fonts/times.ttf")
+	defer pdf.Close()
+
+	data, err := formatRequestToNestjsNats("")
+	if err != nil {
+		return err
+	}
+	msg, err := nats.Request("get_college_data", data)
+	if err != nil {
+		return err
+	}
+
+	// Get college data
+	var response stack.NatsNestJSRes
+	err = json.Unmarshal(msg.Data, &response)
+	if err != nil {
+		return err
+	}
+	// Decode data
+	var collegeData map[string]string
+	jsonString, err := json.Marshal(response.Response)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(jsonString, &collegeData)
+	if err != nil {
+		return err
+	}
+	// Get semester
+	semester, err := getCurrentSemester()
+	if err != nil {
+		return err
+	}
+	pdf.SetFont("times_utf8", "", 10)
+	pdf.AddPage()
+	// Set college data
+	contact := fmt.Sprintf("%v - %v", collegeData["phone"], collegeData["email"])
+	pdf.Text(5, 10, settingsData.COLLEGE_NAME)
+	pdf.Text(5, 15, collegeData["direction"])
+	pdf.Text(5, 20, contact)
+	// Set semester data
+	width, height := pdf.GetPageSize()
+	rightMargin := width - 5
+
+	semesterString := fmt.Sprintf("%v° Semestre - %v", semester.Semester, semester.Year)
+
+	pdf.Text(rightMargin-pdf.GetStringWidth(claims.Name), 10, claims.Name)
+	pdf.Text(rightMargin-pdf.GetStringWidth(semesterString), 15, semesterString)
+	// Footer
+	date := fmt.Sprintf("Emitido el %s", time.Now().Format("2006-02-01"))
+	pdf.Text(5, height-5, date)
+	// Table
+	sum := 5
+	
+
+	for i := 0; i < 20; i++ {
+		pdf.CellFormat(
+			float64(sum),
+			30,
+			strconv.Itoa(i+1),
+			"1",
+			1,
+			"C",
+			false,
+			0,
+			"",
+		)
+		sum += 5
+	}
+
+	if err := pdf.Output(w); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule string) (interface{}, error) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
@@ -424,6 +506,9 @@ func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule 
 		match,
 		group,
 	})
+	if err != nil {
+		return nil, err
+	}
 	if err := cursorP.All(db.Ctx, &percentage); err != nil {
 		return nil, err
 	}

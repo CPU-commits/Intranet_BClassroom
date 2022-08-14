@@ -132,6 +132,11 @@ func Init() {
 			middlewares.RolesMiddleware([]string{models.TEACHER}),
 			gradesController.ExportGrades,
 		)
+		grade.GET(
+			"/download_grades",
+			middlewares.RolesMiddleware([]string{models.STUDENT, models.STUDENT_DIRECTIVE}),
+			gradesController.ExportGradesStudent,
+		)
 		// Works
 		work.GET(
 			"/get_modules_works",

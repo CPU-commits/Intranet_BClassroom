@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 
@@ -105,6 +106,32 @@ func (g *GradesController) ExportGrades(c *gin.Context) {
 			})
 			return false
 		}
+		return false
+	})
+}
+
+func (g *GradesController) ExportGradesStudent(c *gin.Context) {
+	claims, _ := services.NewClaimsFromContext(c)
+	c.Writer.Header().Set(
+		"Content-type",
+		"application/pdf",
+	)
+
+	c.Stream(func(w io.Writer) bool {
+		err := gradesService.ExportGradesStudent(claims, w)
+		if err != nil {
+			fmt.Printf("err.Error(): %v\n", err.Error())
+			c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+				Success: false,
+				Message: err.Error(),
+			})
+			return false
+		}
+
+		c.Writer.Header().Set(
+			"Content-Disposition",
+			fmt.Sprintf("attachment; filename='%s.zip'", claims.Name),
+		)
 		return false
 	})
 }

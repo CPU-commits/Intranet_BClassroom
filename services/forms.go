@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var formService *FormService
@@ -261,11 +262,28 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 	if err := cursor.Decode(&formData); err != nil {
 		return err
 	}
-	if formData.Status == false {
+	if !formData.Status {
 		return fmt.Errorf("Este formulario no está disponible")
 	}
 	if formData.Author != userObjId {
 		return fmt.Errorf("No tienes acceso para editar este formulario")
+	}
+	// Get work
+	var work []models.Work
+	cursorW, err := workModel.GetAll(bson.D{{
+		Key:   "form",
+		Value: idFormObj,
+	}}, &options.FindOptions{})
+	if err != nil {
+		return err
+	}
+	if err := cursorW.All(db.Ctx, &work); err != nil {
+		return err
+	}
+	for _, work := range work {
+		if work.IsRevised {
+			return fmt.Errorf("Este formulario está asignado a un trabajo revisado, no se puede editar")
+		}
 	}
 	// Update form
 	var newItems []models.FormItem
@@ -427,7 +445,7 @@ func (f *FormService) DeleteForm(idForm, idUser string) error {
 	if err := cursor.Decode(&form); err != nil {
 		return err
 	}
-	if form.Status == false {
+	if !form.Status {
 		return fmt.Errorf("Este formulario ya está eliminado")
 	}
 	if form.Author != idObjUser {

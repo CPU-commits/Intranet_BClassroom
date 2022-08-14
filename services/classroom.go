@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -95,7 +96,58 @@ func AuthorizedRouteFromIdModule(idModule string, claims *Claims) error {
 }
 
 func GetMinNMaxGrade() (int, int, error) {
-	return 20, 70, nil
+	data, err := formatRequestToNestjsNats("")
+	if err != nil {
+		return 0, 0, err
+	}
+	var response stack.NatsNestJSRes
+	msg, err := nats.Request("get_min_max_grades", data)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = json.Unmarshal(msg.Data, &response)
+	if err != nil {
+		return 0, 0, err
+	}
+	jsonString, err := json.Marshal(response.Response)
+	if err != nil {
+		return 0, 0, err
+	}
+	var minMax map[string]int
+	err = json.Unmarshal(jsonString, &minMax)
+	if err != nil {
+		return 0, 0, err
+	}
+	return minMax["min"], minMax["max"], nil
+}
+
+func getCurrentSemester() (*models.Semester, error) {
+	data, err := formatRequestToNestjsNats("")
+	if err != nil {
+		return nil, err
+	}
+	var response stack.NatsNestJSRes
+	msg, err := nats.Request("get_valid_semester", data)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(msg.Data, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonString, err := json.Marshal(response.Response)
+	if err != nil {
+		return nil, err
+	}
+	var semester models.Semester
+	err = json.Unmarshal(jsonString, &semester)
+	if err != nil {
+		return nil, err
+	}
+	return &semester, nil
 }
 
 // Get URL file

@@ -19,7 +19,6 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	"github.com/elastic/go-elasticsearch/v8/esutil"
-	"github.com/google/uuid"
 	"github.com/klauspost/compress/zip"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -1109,15 +1108,7 @@ func (w *WorkSerice) getStudentEvaluate(
 }
 
 func (w *WorkSerice) getStudentsFromIdModule(idModule string) ([]Student, error) {
-	id, err := uuid.NewUUID()
-	if err != nil {
-		return nil, err
-	}
-	module := map[string]string{
-		"data": idModule,
-		"id":   id.String(),
-	}
-	data, err := json.Marshal(module)
+	data, err := formatRequestToNestjsNats(idModule)
 	if err != nil {
 		return nil, err
 	}
@@ -1878,7 +1869,6 @@ func (w *WorkSerice) updateGrade(
 		}
 		// MAX Points
 		var questionsWPoints []models.ItemQuestion
-		var maxPoints int
 		for _, question := range questions {
 			if question.Type != "alternatives" {
 				maxPoints += question.Points
@@ -2243,6 +2233,9 @@ func (w *WorkSerice) TransformPointsToGrade(
 	minGrade,
 	points int,
 ) float64 {
+	if points == 0 {
+		return float64(minGrade)
+	}
 	grade := (scale * float32(points)) + float32(minGrade)
 	finalGrade := math.Round(float64(grade)*10) / 10
 	return finalGrade
@@ -2368,9 +2361,11 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 	}
 	// Get grade program
 	var program *models.GradesProgram
-	cursor = gradeProgramModel.GetByID(work.Grade)
-	if err := cursor.Decode(&program); err != nil {
-		return nil
+	if work.IsQualified {
+		cursor = gradeProgramModel.GetByID(work.Grade)
+		if err := cursor.Decode(&program); err != nil {
+			return nil
+		}
 	}
 	// Get questions form
 	var questionsWPoints []models.ItemQuestion
@@ -2421,7 +2416,7 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 					Value: work.Grade,
 				},
 			}
-			if program.IsAcumulative {
+			if work.IsQualified && program.IsAcumulative {
 				match = append(match, bson.E{
 					Key:   "acumulative",
 					Value: work.Acumulative,
@@ -2564,6 +2559,7 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 				work.Module,
 				student.ID,
 				idObjUser,
+				idObjWork,
 				student.Grade,
 			)
 			modelsGrades = append(modelsGrades, modelWorkGrade)
@@ -2762,6 +2758,7 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 				work.Module,
 				student.ID,
 				idObjUser,
+				idObjWork,
 				student.Grade,
 			)
 			modelsGrades = append(modelsGrades, modelWorkGrade)
