@@ -7,13 +7,7 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
-
-type ModuleIDs struct {
-	IDCourse  primitive.ObjectID
-	IDSubject primitive.ObjectID
-}
 
 // Service module
 var moduleService = NewModulesService()
@@ -30,6 +24,9 @@ func FindCourses(claims *Claims) ([]ModuleIDs, error) {
 
 		cursor := studentModel.GetOne(filter)
 		err := cursor.Decode(&studentData)
+		if err != nil {
+			return nil, err
+		}
 		if studentData.Course.IsZero() {
 			return nil, fmt.Errorf("No estás asignado a ningún curso")
 		}
