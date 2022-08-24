@@ -111,13 +111,23 @@ func Init() {
 		// Grades
 		grade.GET(
 			"/get_grade_programs/:idModule",
-			middlewares.RolesMiddleware(defaultRoles),
+			middlewares.RolesMiddleware([]string{
+				models.TEACHER,
+				models.STUDENT,
+				models.STUDENT_DIRECTIVE,
+				models.DIRECTIVE,
+				models.DIRECTOR,
+			}),
 			middlewares.AuthorizedRouteModule(),
 			gradesController.GetProgramGrade,
 		)
 		grade.GET(
 			"/get_students_grades/:idModule",
-			middlewares.RolesMiddleware([]string{models.TEACHER}),
+			middlewares.RolesMiddleware([]string{
+				models.TEACHER,
+				models.DIRECTOR,
+				models.DIRECTIVE,
+			}),
 			middlewares.AuthorizedRouteModule(),
 			gradesController.GetStudentsGrades,
 		)
