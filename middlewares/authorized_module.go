@@ -15,6 +15,12 @@ var workModel = models.NewWorkModel()
 
 func AuthorizedRouteModule() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		claims, _ := services.NewClaimsFromContext(ctx)
+		if claims.UserType == models.DIRECTOR || claims.UserType == models.DIRECTIVE {
+			ctx.Next()
+			return
+		}
+
 		idModule := ctx.Param("idModule")
 		if idModule == "" && ctx.Param("idWork") != "" {
 			idObjWork, err := primitive.ObjectIDFromHex(ctx.Param("idWork"))
@@ -38,7 +44,6 @@ func AuthorizedRouteModule() gin.HandlerFunc {
 			idModule = work.Module.Hex()
 		}
 
-		claims, _ := services.NewClaimsFromContext(ctx)
 		authorized := services.AuthorizedRouteFromIdModule(idModule, claims)
 		if authorized != nil {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, &res.Response{
