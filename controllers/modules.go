@@ -14,6 +14,15 @@ var moduleService = services.NewModulesService()
 
 type ModulesController struct{}
 
+// Nats
+func init() {
+	getCourses()
+}
+
+func getCourses() {
+	moduleService.GetCourses()
+}
+
 // Query
 func (modules *ModulesController) GetModule(c *gin.Context) {
 	idModule := c.Param("idModule")
