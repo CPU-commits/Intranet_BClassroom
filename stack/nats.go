@@ -19,6 +19,12 @@ type NatsNestJSRes struct {
 	Response   interface{} `json:"response"`
 }
 
+// Nats Golang
+type NatsGolangReq struct {
+	Pattern string      `json:"pattern"`
+	Data    interface{} `json:"data"`
+}
+
 var settingsData = settings.GetSettings()
 
 func newConnection() *nats.Conn {
