@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/stack"
+	natsPackage "github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -215,6 +218,44 @@ func getProject() bson.D {
 	}
 }
 
+func (module *ModulesService) GetCourses() {
+	nats.Subscribe("get_courses", func(m *natsPackage.Msg) {
+		var data stack.NatsGolangReq
+
+		err := json.Unmarshal(m.Data, &data)
+		if err != nil {
+			return
+		}
+		payload := make(map[string]interface{})
+		v := reflect.ValueOf(data.Data)
+		if v.Kind() == reflect.Map {
+			for _, key := range v.MapKeys() {
+				strct := v.MapIndex(key)
+				payload[key.String()] = strct.Interface()
+			}
+		} else {
+			return
+		}
+		courses, err := FindCourses(&Claims{
+			ID:       payload["_id"].(string),
+			UserType: payload["user_type"].(string),
+		})
+		if err != nil {
+			return
+		}
+
+		coursesJson, err := json.Marshal(courses)
+		if err != nil {
+			return
+		}
+		m.RespondMsg(&natsPackage.Msg{
+			Data:    coursesJson,
+			Reply:   m.Reply,
+			Subject: m.Subject,
+		})
+	})
+}
+
 func (module *ModulesService) GetModuleFromID(idModule string) (*models.Module, error) {
 	objId, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
@@ -385,6 +426,9 @@ func (module *ModulesService) NewSubSection(
 		Name: subSectionData.SubSection,
 	}
 	objId, err := primitive.ObjectIDFromHex(idSection)
+	if err != nil {
+		return nil, err
+	}
 	_, err = moduleModel.Use().UpdateByID(db.Ctx, objId, bson.M{
 		"$push": bson.M{
 			"sub_sections": subSection,

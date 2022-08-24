@@ -17,6 +17,7 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	"github.com/elastic/go-elasticsearch/v8/esutil"
 	"github.com/klauspost/compress/zip"
@@ -29,28 +30,6 @@ import (
 var workService *WorkSerice
 
 type WorkSerice struct{}
-
-type CloseForm struct {
-	Work    string
-	Student string
-	Diff    float64
-}
-
-type Student struct {
-	ID                 string                               `json:"_id"`
-	User               models.SimpleUser                    `json:"user"`
-	V                  int                                  `json:"__v"`
-	RegistrationNumber string                               `json:"registration_number"`
-	Course             string                               `json:"course"`
-	AccessForm         *models.FormAccess                   `json:"access,omitempty"`
-	FilesUploaded      *models.FileUploadedClassroomWLookup `json:"files_uploaded,omitempty"`
-	Evuluate           map[string]int                       `json:"evaluate,omitempty"`
-}
-
-type AnswerRes struct {
-	Answer   models.Answer `json:"answer"`
-	Evaluate interface{}   `json:"evaluate,omitempty"`
-}
 
 func (w *WorkSerice) GetLookupUser() bson.D {
 	return bson.D{
@@ -641,6 +620,9 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, err
 	}
 	// Get work
 	work, err := w.getWorkFromId(idObjWork)
+	if err != nil {
+		return nil, err
+	}
 
 	if work.Type != "form" {
 		return nil, fmt.Errorf("Este trabajo no es de tipo formulario")
@@ -1267,10 +1249,6 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) (interface{}, in
 	return students, totalPoints, nil
 }
 
-func (w *WorkSerice) getZipStudentWork() {
-
-}
-
 func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter io.Writer) (*zip.Writer, error) {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
@@ -1323,6 +1301,9 @@ func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter 
 			return nil, err
 		}
 		body, err := ioutil.ReadAll(file.file)
+		if err != nil {
+			return nil, err
+		}
 		_, err = zipFile.Write(body)
 		if err != nil {
 			return nil, err
@@ -1409,6 +1390,11 @@ func (w *WorkSerice) UploadWork(
 	if tStart.After(tLimit) {
 		return fmt.Errorf("La fecha y hora de inicio es mayor a la limite")
 	}
+	// Get module
+	module, err := moduleService.GetModuleFromID(idModule)
+	if err != nil {
+		return err
+	}
 	// Grade
 	if *work.IsQualified {
 		idObjGrade, err := primitive.ObjectIDFromHex(work.Grade)
@@ -1493,6 +1479,18 @@ func (w *WorkSerice) UploadWork(
 	if err := bi.Close(context.Background()); err != nil {
 		return err
 	}
+	// Notification
+	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+		Title: work.Title,
+		Link: fmt.Sprintf(
+			"/aula_virtual/clase/%s/trabajos/%s",
+			idModule,
+			insertedWork.InsertedID.(primitive.ObjectID).Hex(),
+		),
+		Where: module.Subject.Hex(),
+		Room:  module.Section.Hex(),
+		Type:  res.WORK,
+	})
 	return nil
 }
 
@@ -1877,7 +1875,7 @@ func (w *WorkSerice) updateGrade(
 		}
 		// Points
 		points, _, err = w.getStudentEvaluate(
-			questions,
+			questionsWPoints,
 			idObjStudent,
 			work.ID,
 		)
@@ -2009,6 +2007,20 @@ func (w *WorkSerice) UploadPointsStudent(
 	if time.Now().Before(work.DateLimit.Time()) {
 		return fmt.Errorf("Todavía no se pueden evaluar preguntas en este formulario")
 	}
+	// Get module
+	module, err := moduleService.GetModuleFromID(work.Module.Hex())
+	if err != nil {
+		return err
+	}
+	// Get grade program
+	var gradeProgram models.GradesProgram
+	cursor := gradeProgramModel.GetByID(work.Grade)
+	if err := cursor.Decode(&gradeProgram); err != nil {
+		if err.Error() == db.NO_SINGLE_DOCUMENT {
+			return fmt.Errorf("No existe la programación de calificación")
+		}
+		return err
+	}
 	// Get form
 	form, err := formService.GetFormById(work.Form)
 	if err != nil {
@@ -2019,7 +2031,7 @@ func (w *WorkSerice) UploadPointsStudent(
 	}
 	// Get question
 	var question *models.ItemQuestion
-	cursor := formQuestionModel.GetByID(idObjQuestion)
+	cursor = formQuestionModel.GetByID(idObjQuestion)
 	if err := cursor.Decode(&question); err != nil {
 		return err
 	}
@@ -2084,6 +2096,18 @@ func (w *WorkSerice) UploadPointsStudent(
 		if err != nil {
 			return err
 		}
+		// Send notifications
+		nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+			Title: fmt.Sprintf("Calificación N%d° actualizada", gradeProgram.Number),
+			Link: fmt.Sprintf(
+				"/aula_virtual/clase/%s/calificaciones",
+				work.Module.Hex(),
+			),
+			Where:  module.Subject.Hex(),
+			Room:   module.Section.Hex(),
+			Type:   res.GRADE,
+			IDUser: idStudent,
+		})
 	}
 	return nil
 }
@@ -2122,9 +2146,23 @@ func (w *WorkSerice) UploadEvaluateFiles(
 	if !reavaluate && work.IsRevised {
 		return fmt.Errorf("Ya no se puede actualizar el puntaje del alumno")
 	}
+	// Get module
+	module, err := moduleService.GetModuleFromID(work.Module.Hex())
+	if err != nil {
+		return err
+	}
+	// Get grade program
+	var gradeProgram models.GradesProgram
+	cursor := gradeProgramModel.GetByID(work.Grade)
+	if err := cursor.Decode(&gradeProgram); err != nil {
+		if err.Error() == db.NO_SINGLE_DOCUMENT {
+			return fmt.Errorf("No existe la programación de calificación")
+		}
+		return err
+	}
 	// Get evaluate student
 	var fUC *models.FileUploadedClassroom
-	cursor := fileUCModel.GetOne(bson.D{
+	cursor = fileUCModel.GetOne(bson.D{
 		{
 			Key:   "student",
 			Value: idObjStudent,
@@ -2225,6 +2263,18 @@ func (w *WorkSerice) UploadEvaluateFiles(
 			return err
 		}
 	}
+	// Send notifications
+	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+		Title: fmt.Sprintf("Calificación N%d° actualizada", gradeProgram.Number),
+		Link: fmt.Sprintf(
+			"/aula_virtual/clase/%s/calificaciones",
+			work.Module.Hex(),
+		),
+		Where:  module.Subject.Hex(),
+		Room:   module.Section.Hex(),
+		Type:   res.GRADE,
+		IDUser: idStudent,
+	})
 	return nil
 }
 
@@ -2569,6 +2619,22 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 			return err
 		}
 	}
+	// Send notifications
+	module, err := moduleService.GetModuleFromID(work.Module.Hex())
+	if err != nil {
+		return err
+	}
+	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+		Title: fmt.Sprintf("Trabajo evaluado %v", work.Title),
+		Link: fmt.Sprintf(
+			"/aula_virtual/clase/%s/trabajos/%s",
+			work.Module.Hex(),
+			work.ID.Hex(),
+		),
+		Where: module.Subject.Hex(),
+		Room:  module.Section.Hex(),
+		Type:  res.GRADE,
+	})
 	return nil
 }
 
@@ -2594,6 +2660,11 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 	}
 	if work.IsRevised {
 		return fmt.Errorf("Este trabajo ya está evaluado")
+	}
+	// Get module
+	module, err := moduleService.GetModuleFromID(work.Module.Hex())
+	if err != nil {
+		return err
 	}
 	// Get grade program
 	var program *models.GradesProgram
@@ -2768,6 +2839,18 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 			return err
 		}
 	}
+	// Send notifications
+	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+		Title: fmt.Sprintf("Trabajo evaluado %v", work.Title),
+		Link: fmt.Sprintf(
+			"/aula_virtual/clase/%s/trabajos/%s",
+			work.Module.Hex(),
+			work.ID.Hex(),
+		),
+		Where: module.Subject.Hex(),
+		Room:  module.Section.Hex(),
+		Type:  res.GRADE,
+	})
 	return nil
 }
 
@@ -2790,7 +2873,7 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 	}
 	// Update work
 	update := bson.M{}
-	var updateEs map[string]interface{}
+	updateEs := make(map[string]interface{})
 	unset := bson.M{}
 	if work.Title != "" {
 		update["title"] = work.Title
@@ -2929,6 +3012,9 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 	// Update work
 	// Update ES
 	data, err := json.Marshal(updateEs)
+	if err != nil {
+		return err
+	}
 	bi, err := models.NewBulkWork()
 	if err != nil {
 		return err
@@ -3048,6 +3134,8 @@ func (w *WorkSerice) DeleteWork(idWork string) error {
 	if err != nil {
 		return err
 	}
+	// Delete notifications
+	nats.Publish("delete_notification", []byte(idWork))
 	return nil
 }
 
@@ -3206,7 +3294,7 @@ func (w *WorkSerice) DeleteItemPattern(idWork, idItem string) error {
 }
 
 func NewWorksService() *WorkSerice {
-	if publicationService == nil {
+	if workService == nil {
 		workService = &WorkSerice{}
 	}
 	return workService

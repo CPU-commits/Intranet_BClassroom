@@ -13,6 +13,7 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/elastic/go-elasticsearch/v8/esutil"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -22,23 +23,6 @@ import (
 var publicationService *PublicationService
 
 type PublicationService struct{}
-
-// Responses type
-type AttachedRes struct {
-	ID    string       `json:"_id"`
-	Type  string       `json:"type"`
-	File  *models.File `json:"file"`
-	Link  string       `json:"link"`
-	Title string       `json:"title"`
-}
-
-type PublicationsRes struct {
-	ID         string             `json:"_id" bson:"_id,omitempty"`
-	Attached   []AttachedRes      `json:"attached" bson:"attached"`
-	Content    interface{}        `json:"content"`
-	UploadDate primitive.DateTime `json:"upload_date" bson:"upload_date"`
-	UpdateDate primitive.DateTime `json:"update_date" bson:"update_date"`
-}
 
 func (publication *PublicationService) GetPublicationsFromIdModule(
 	idModule,
@@ -301,6 +285,9 @@ func (publication *PublicationService) NewPublication(
 		userIdObj,
 		module.SubSections[sectionInt].ID,
 	)
+	if err != nil {
+		return nil, err
+	}
 	insertedPublication, err := publicationModel.NewDocument(newPublicationModel)
 	if err != nil {
 		return nil, err
@@ -336,6 +323,27 @@ func (publication *PublicationService) NewPublication(
 	if err := bi.Close(context.Background()); err != nil {
 		return nil, err
 	}
+	// Notification
+	var titleOfNotification string
+	for i := 0; i < len(publicationData.Content); i++ {
+		titleOfNotification += string(publicationData.Content[i])
+		if i == 19 {
+			break
+		}
+	}
+	titleOfNotification += "..."
+
+	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+		Title: titleOfNotification,
+		Link: fmt.Sprintf(
+			"/aula_virtual/clase/%s/publicacion/%s",
+			idModule,
+			insertedPublication.InsertedID.(primitive.ObjectID).Hex(),
+		),
+		Where: module.Subject.Hex(),
+		Room:  module.Section.Hex(),
+		Type:  res.PUBLICATION,
+	})
 	// Response
 	response := make(map[string]interface{})
 	response["_id"] = insertedPublication.InsertedID
@@ -370,6 +378,9 @@ func (publication *PublicationService) UpdatePublication(
 	// Update
 	// Update content
 	data, err := json.Marshal(content)
+	if err != nil {
+		return err
+	}
 	bi, err := models.NewBulkPublication()
 	if err != nil {
 		return err
@@ -454,6 +465,8 @@ func (publication *PublicationService) DeletePublication(
 	if err != nil {
 		return err
 	}
+	// Delete notifications
+	nats.Publish("delete_notification", []byte(idPublication))
 	return nil
 }
 

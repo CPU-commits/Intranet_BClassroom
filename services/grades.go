@@ -1,25 +1,21 @@
 package services
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
-	"strconv"
 	"sync"
-	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
-	"github.com/CPU-commits/Intranet_BClassroom/stack"
-	"github.com/jung-kurt/gofpdf"
-	"github.com/xuri/excelize/v2"
+	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+const MAX_GRADES = 30
 
 var gradesService *GradesService
 
@@ -48,22 +44,6 @@ func (g *GradesService) GetGradePrograms(idModule string) ([]models.GradesProgra
 		return programs[i].Number < programs[j].Number
 	})
 	return programs, nil
-}
-
-type Acumulative struct {
-	ID        string             `json:"_id"`
-	Grade     float64            `json:"grade"`
-	Evaluator *models.SimpleUser `json:"evaluator"`
-	Date      time.Time          `json:"date"`
-}
-
-type OrderedGrade struct {
-	ID            string            `json:"_id,omitempty"`
-	Grade         float64           `json:"grade"`
-	IsAcumulative bool              `json:"is_acumulative"`
-	Acumulative   []*Acumulative    `json:"acumulative,omitempty"`
-	Evaluator     models.SimpleUser `json:"evaluator,omitempty"`
-	Date          time.Time         `json:"date,omitempty"`
 }
 
 func (g *GradesService) getIndexAcumulative(
@@ -132,11 +112,6 @@ func (g *GradesService) orderInSliceGradesStudent(
 		}
 	}
 	return orderedGrades
-}
-
-type StudentGrade struct {
-	Student models.SimpleUser `json:"student"`
-	Grades  []*OrderedGrade   `json:"grades"`
 }
 
 func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, error) {
@@ -309,150 +284,6 @@ func (g *GradesService) getProgramGradeById(idObjProgram primitive.ObjectID) (*m
 	return program, nil
 }
 
-func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.File, error) {
-	_, err := primitive.ObjectIDFromHex(idModule)
-	if err != nil {
-		return nil, err
-	}
-	// Get grades
-	data, err := g.GetStudentsGrades(idModule)
-	if err != nil {
-		return nil, err
-	}
-	// Get programs
-	programs, err := g.GetGradePrograms(idModule)
-	if err != nil {
-		return nil, err
-	}
-	// Init file
-	file := excelize.NewFile()
-	sheetName := "Calificaciones"
-	file.SetSheetName("Sheet1", sheetName)
-	// Set columns
-	file.SetCellValue(sheetName, "A1", "Estudiante")
-	for i, program := range programs {
-		value := fmt.Sprintf("%v (%v%v)", program.Number, program.Percentage, string('%'))
-		column := fmt.Sprintf("%v1", string(rune('A'+i+1)))
-		file.SetCellValue(sheetName, column, value)
-	}
-	// Set values
-	for i, student := range data {
-		studentName := fmt.Sprintf(
-			"%v %v %v",
-			student.Student.Name,
-			student.Student.FirstLastname,
-			student.Student.Rut,
-		)
-
-		column := fmt.Sprintf("A%v", i+2)
-		file.SetCellValue(sheetName, column, studentName)
-		for j, grade := range student.Grades {
-			if grade != nil {
-				column := fmt.Sprintf("%v%v", string(rune('A'+j+1)), i+2)
-				if !grade.IsAcumulative {
-					file.SetCellValue(sheetName, column, grade.Grade)
-				} else {
-					value := ""
-					for k, acumulative := range grade.Acumulative {
-						if acumulative != nil {
-							value += fmt.Sprintf(
-								"%v (%v%v) - ",
-								acumulative.Grade,
-								programs[j].Acumulative[k].Percentage,
-								string('%'),
-							)
-						}
-					}
-					file.SetCellValue(sheetName, column, value)
-				}
-			}
-		}
-	}
-
-	if err := file.Write(w); err != nil {
-		return nil, err
-	}
-	return file, nil
-}
-
-func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
-	pdf := gofpdf.New("L", "mm", "A4", "")
-	pdf.AddUTF8Font("times_utf8", "", "./fonts/times.ttf")
-	defer pdf.Close()
-
-	data, err := formatRequestToNestjsNats("")
-	if err != nil {
-		return err
-	}
-	msg, err := nats.Request("get_college_data", data)
-	if err != nil {
-		return err
-	}
-
-	// Get college data
-	var response stack.NatsNestJSRes
-	err = json.Unmarshal(msg.Data, &response)
-	if err != nil {
-		return err
-	}
-	// Decode data
-	var collegeData map[string]string
-	jsonString, err := json.Marshal(response.Response)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(jsonString, &collegeData)
-	if err != nil {
-		return err
-	}
-	// Get semester
-	semester, err := getCurrentSemester()
-	if err != nil {
-		return err
-	}
-	pdf.SetFont("times_utf8", "", 10)
-	pdf.AddPage()
-	// Set college data
-	contact := fmt.Sprintf("%v - %v", collegeData["phone"], collegeData["email"])
-	pdf.Text(5, 10, settingsData.COLLEGE_NAME)
-	pdf.Text(5, 15, collegeData["direction"])
-	pdf.Text(5, 20, contact)
-	// Set semester data
-	width, height := pdf.GetPageSize()
-	rightMargin := width - 5
-
-	semesterString := fmt.Sprintf("%v° Semestre - %v", semester.Semester, semester.Year)
-
-	pdf.Text(rightMargin-pdf.GetStringWidth(claims.Name), 10, claims.Name)
-	pdf.Text(rightMargin-pdf.GetStringWidth(semesterString), 15, semesterString)
-	// Footer
-	date := fmt.Sprintf("Emitido el %s", time.Now().Format("2006-02-01"))
-	pdf.Text(5, height-5, date)
-	// Table
-	sum := 5
-	
-
-	for i := 0; i < 20; i++ {
-		pdf.CellFormat(
-			float64(sum),
-			30,
-			strconv.Itoa(i+1),
-			"1",
-			1,
-			"C",
-			false,
-			0,
-			"",
-		)
-		sum += 5
-	}
-
-	if err := pdf.Output(w); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule string) (interface{}, error) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
@@ -565,6 +396,11 @@ func (g *GradesService) UploadGrade(
 	if err != nil {
 		return nil, err
 	}
+	// Get module
+	module, err := moduleService.GetModuleFromID(idModule)
+	if err != nil {
+		return nil, err
+	}
 	// Evaluate grade
 	min, max, err := GetMinNMaxGrade()
 	if err != nil {
@@ -639,6 +475,18 @@ func (g *GradesService) UploadGrade(
 	if err != nil {
 		return nil, err
 	}
+	// Send notifications
+	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+		Title: fmt.Sprintf("Calificación N%d° subida", program.Number),
+		Link: fmt.Sprintf(
+			"/aula_virtual/clase/%s/calificaciones",
+			idModule,
+		),
+		Where:  module.Subject.Hex(),
+		Room:   module.Section.Hex(),
+		Type:   res.GRADE,
+		IDUser: idStudent,
+	})
 	return inserted.InsertedID, nil
 }
 
@@ -728,6 +576,20 @@ func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGr
 	if gradeData.Module != idObjModule {
 		return fmt.Errorf("Esta calificación no pertenece al módulo")
 	}
+	// Get grade program
+	var gradeProgram models.GradesProgram
+	cursor = gradeProgramModel.GetByID(gradeData.Program)
+	if err := cursor.Decode(&gradeProgram); err != nil {
+		if err.Error() == db.NO_SINGLE_DOCUMENT {
+			return fmt.Errorf("No existe la programación de calificación")
+		}
+		return err
+	}
+	// Get module
+	module, err := moduleService.GetModuleFromID(idModule)
+	if err != nil {
+		return err
+	}
 	// Min max
 	min, max, err := GetMinNMaxGrade()
 	if err != nil {
@@ -746,6 +608,18 @@ func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGr
 	if err != nil {
 		return err
 	}
+	// Send notifications
+	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
+		Title: fmt.Sprintf("Calificación N%d° actualizada", gradeProgram.Number),
+		Link: fmt.Sprintf(
+			"/aula_virtual/clase/%s/calificaciones",
+			idModule,
+		),
+		Where:  module.Subject.Hex(),
+		Room:   module.Section.Hex(),
+		Type:   res.GRADE,
+		IDUser: gradeData.Student.Hex(),
+	})
 	return nil
 }
 

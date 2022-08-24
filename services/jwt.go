@@ -52,7 +52,7 @@ func ExtractTokenMetadata(token *jwt.Token) (*Claims, error) {
 
 func NewClaimsFromContext(ctx *gin.Context) (*Claims, bool) {
 	user, exists := ctx.Get("user")
-	if exists == false {
+	if !exists {
 		return &Claims{}, false
 	}
 	return &Claims{
