@@ -1,7 +1,9 @@
 package stack
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/settings"
@@ -34,6 +36,26 @@ func newConnection() *nats.Conn {
 		panic(err)
 	}
 	return nc
+}
+
+func (nats *NatsClient) DecodeDataNest(data []byte) (map[string]interface{}, error) {
+	var dataNest NatsGolangReq
+
+	err := json.Unmarshal(data, &dataNest)
+	if err != nil {
+		return nil, err
+	}
+	payload := make(map[string]interface{})
+	v := reflect.ValueOf(dataNest.Data)
+	if v.Kind() == reflect.Map {
+		for _, key := range v.MapKeys() {
+			strct := v.MapIndex(key)
+			payload[key.String()] = strct.Interface()
+		}
+	} else {
+		return nil, fmt.Errorf("data not is a map")
+	}
+	return payload, nil
 }
 
 func (nats *NatsClient) Subscribe(channel string, toDo func(m *nats.Msg)) {
