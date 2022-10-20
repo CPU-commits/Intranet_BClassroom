@@ -1346,16 +1346,34 @@ func (w *WorkSerice) verifyGradeWork(idObjModule, idObjGrade primitive.ObjectID)
 	gradeRet.Grade = grade.ID
 	// Not used
 	var work *models.Work
-	cursor = workModel.GetOne(bson.D{
-		{
-			Key:   "module",
-			Value: idObjModule,
-		},
-		{
-			Key:   "grade",
-			Value: idObjGrade,
-		},
-	})
+	if !gradeRet.IsAcumulative {
+		cursor = workModel.GetOne(bson.D{
+			{
+				Key:   "module",
+				Value: idObjModule,
+			},
+			{
+				Key:   "grade",
+				Value: idObjGrade,
+			},
+		})
+	} else {
+		cursor = workModel.GetOne(bson.D{
+			{
+				Key:   "module",
+				Value: idObjModule,
+			},
+			{
+				Key:   "grade",
+				Value: gradeRet.Grade,
+			},
+			{
+				Key:   "acumulative",
+				Value: gradeRet.Acumulative,
+			},
+		})
+	}
+
 	if err := cursor.Decode(&work); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 		return nil, err
 	}
@@ -1533,8 +1551,11 @@ func (w *WorkSerice) saveAnswer(
 		return err
 	}
 	lenAnswers := len(question.Answers)
-	if question.Type != "written" && (lenAnswers <= *answer.Answer || lenAnswers < 0) {
-		return fmt.Errorf("Indique una respuesta válida")
+
+	if question.Type != "written" && answer.Answer != nil {
+		if lenAnswers <= *answer.Answer || lenAnswers < 0 {
+			return fmt.Errorf("Indique una respuesta válida")
+		}
 	}
 	// Get answer
 	var answerData *models.Answer
@@ -2330,40 +2351,42 @@ func (w *WorkSerice) gradeEvaluatedWork(
 		}
 	}
 	// Insert grades
-	_, err := gradeModel.Use().InsertMany(db.Ctx, modelsGrades)
-	if err != nil {
-		return err
-	}
-	// Update grades
-	for _, update := range updates {
-		filter := bson.D{
-			{
-				Key:   "module",
-				Value: work.Module,
-			},
-			{
-				Key:   "student",
-				Value: update.Student,
-			},
-			{
-				Key:   "program",
-				Value: program.ID,
-			},
-		}
-		if program.IsAcumulative {
-			filter = append(filter, bson.E{
-				Key:   "acumulative",
-				Value: program.Acumulative,
-			})
-		}
-		_, err = gradeModel.Use().UpdateOne(db.Ctx, filter, bson.D{{
-			Key: "$set",
-			Value: bson.M{
-				"grade": update.Grade,
-			},
-		}})
+	if len(modelsGrades) > 0 {
+		_, err := gradeModel.Use().InsertMany(db.Ctx, modelsGrades)
 		if err != nil {
 			return err
+		}
+		// Update grades
+		for _, update := range updates {
+			filter := bson.D{
+				{
+					Key:   "module",
+					Value: work.Module,
+				},
+				{
+					Key:   "student",
+					Value: update.Student,
+				},
+				{
+					Key:   "program",
+					Value: program.ID,
+				},
+			}
+			if program.IsAcumulative {
+				filter = append(filter, bson.E{
+					Key:   "acumulative",
+					Value: program.Acumulative,
+				})
+			}
+			_, err = gradeModel.Use().UpdateOne(db.Ctx, filter, bson.D{{
+				Key: "$set",
+				Value: bson.M{
+					"grade": update.Grade,
+				},
+			}})
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -2888,17 +2911,19 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 		if err != nil {
 			return err
 		}
-		// Grade
-		grade, err := w.verifyGradeWork(workData.Module, idObjGrade)
-		if err != nil {
-			return err
-		}
-		if grade.IsAcumulative {
-			update["grade"] = grade.Grade
-			update["acumulative"] = grade.Acumulative
-		} else {
-			update["grade"] = grade.Grade
-			unset["acumulative"] = ""
+		if workData.Grade != idObjGrade && workData.Acumulative != idObjGrade {
+			// Grade
+			grade, err := w.verifyGradeWork(workData.Module, idObjGrade)
+			if err != nil {
+				return err
+			}
+			if grade.IsAcumulative {
+				update["grade"] = grade.Grade
+				update["acumulative"] = grade.Acumulative
+			} else {
+				update["grade"] = grade.Grade
+				unset["acumulative"] = ""
+			}
 		}
 	}
 	now := time.Now()
