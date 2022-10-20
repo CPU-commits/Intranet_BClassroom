@@ -47,26 +47,26 @@ func Init() {
 		models.TEACHER,
 	}
 	modules := router.Group(
-		"/api/classroom/modules",
+		"/api/c/classroom/modules",
 		middlewares.JWTMiddleware(),
 		middlewares.RolesMiddleware(defaultRoles),
 	)
 	publications := router.Group(
-		"/api/classroom/publications",
+		"/api/c/classroom/publications",
 		middlewares.JWTMiddleware(),
 		middlewares.RolesMiddleware(defaultRoles),
 	)
 	forms := router.Group(
-		"/api/classroom/forms",
+		"/api/c/classroom/forms",
 		middlewares.JWTMiddleware(),
 		middlewares.RolesMiddleware(defaultRoles),
 	)
 	grade := router.Group(
-		"/api/classroom/grades",
+		"/api/c/classroom/grades",
 		middlewares.JWTMiddleware(),
 	)
 	work := router.Group(
-		"/api/classroom/works",
+		"/api/c/classroom/works",
 		middlewares.JWTMiddleware(),
 	)
 	{
@@ -84,6 +84,7 @@ func Init() {
 			modulesController.GetModule,
 		)
 		modules.GET("/get_modules", modulesController.GetModules)
+		modules.GET("/get_modules_history", modulesController.GetModulesHistory)
 		modules.GET(
 			"/download_file/:idFile/:idModule",
 			middlewares.AuthorizedRouteModule(),
@@ -139,7 +140,11 @@ func Init() {
 		)
 		grade.GET(
 			"/export_grades/:idModule",
-			middlewares.RolesMiddleware([]string{models.TEACHER}),
+			middlewares.RolesMiddleware([]string{
+				models.TEACHER,
+				models.DIRECTIVE,
+				models.DIRECTOR,
+			}),
 			gradesController.ExportGrades,
 		)
 		grade.GET(

@@ -43,27 +43,27 @@ func Init() {
 	teacherRol := []string{models.TEACHER}
 	studentRol := []string{models.STUDENT, models.STUDENT_DIRECTIVE}
 	module := router.Group(
-		"/api/classroom/modules",
+		"/api/c/classroom/modules",
 		middlewares.JWTMiddleware(),
 		middlewares.RolesMiddleware(teacherRol),
 	)
 	publication := router.Group(
-		"/api/classroom/publications",
+		"/api/c/classroom/publications",
 		middlewares.JWTMiddleware(),
 		middlewares.RolesMiddleware(teacherRol),
 	)
 	form := router.Group(
-		"/api/classroom/forms",
+		"/api/c/classroom/forms",
 		middlewares.JWTMiddleware(),
 		middlewares.RolesMiddleware(teacherRol),
 	)
 	grade := router.Group(
-		"/api/classroom/grades",
+		"/api/c/classroom/grades",
 		middlewares.JWTMiddleware(),
 		middlewares.RolesMiddleware(teacherRol),
 	)
 	work := router.Group(
-		"/api/classroom/works",
+		"/api/c/classroom/works",
 		middlewares.JWTMiddleware(),
 	)
 	{
