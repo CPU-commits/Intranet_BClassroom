@@ -5,18 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
-	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	natsPackage "github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var modulesService *ModulesService
@@ -220,20 +219,8 @@ func getProject() bson.D {
 
 func (module *ModulesService) GetCourses() {
 	nats.Subscribe("get_courses", func(m *natsPackage.Msg) {
-		var data stack.NatsGolangReq
-
-		err := json.Unmarshal(m.Data, &data)
+		payload, err := nats.DecodeDataNest(m.Data)
 		if err != nil {
-			return
-		}
-		payload := make(map[string]interface{})
-		v := reflect.ValueOf(data.Data)
-		if v.Kind() == reflect.Map {
-			for _, key := range v.MapKeys() {
-				strct := v.MapIndex(key)
-				payload[key.String()] = strct.Interface()
-			}
-		} else {
 			return
 		}
 		courses, err := FindCourses(&Claims{
@@ -414,6 +401,169 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 	}
 	// Get only courses
 	return modulesData, nil
+}
+
+func (module *ModulesService) GetModulesHistory(
+	idUser string,
+	limit, // If is zero, not limit
+	skip int,
+	total bool,
+	simple bool,
+	idSemester string,
+) ([]models.ModuleWithLookup, int, error) {
+	var totalModules int
+
+	idObjStudent, err := primitive.ObjectIDFromHex(idUser)
+	if err != nil {
+		return nil, totalModules, err
+	}
+	// Find modules
+	var modules []models.ModuleHistory
+
+	var match bson.D
+	if idSemester == "" {
+		match = bson.D{{
+			Key: "$match",
+			Value: bson.M{
+				"students": bson.M{
+					"$in": bson.A{idObjStudent},
+				},
+			},
+		}}
+	} else {
+		idObjSemester, err := primitive.ObjectIDFromHex(idSemester)
+		if err != nil {
+			return nil, 0, err
+		}
+		match = bson.D{{
+			Key: "$match",
+			Value: bson.M{
+				"students": bson.M{
+					"$in": bson.A{idObjStudent},
+				},
+				"semester": idObjSemester,
+			},
+		}}
+	}
+	project := bson.D{{
+		Key: "$project",
+		Value: bson.M{
+			"module": 1,
+		},
+	}}
+	sort := bson.D{{
+		Key: "$sort",
+		Value: bson.M{
+			"date": -1,
+		},
+	}}
+	skipPl := bson.D{{
+		Key:   "$skip",
+		Value: skip,
+	}}
+	limitPl := bson.D{{
+		Key:   "$limit",
+		Value: limit,
+	}}
+
+	pipeline := mongo.Pipeline{
+		match,
+		project,
+		sort,
+		skipPl,
+	}
+	if limit != 0 {
+		pipeline = append(pipeline, limitPl)
+	}
+	cursor, err := moduleHistoryModel.Aggreagate(pipeline)
+	if err != nil {
+		return nil, totalModules, err
+	}
+	err = cursor.All(db.Ctx, &modules)
+	if err != nil {
+		return nil, totalModules, err
+	}
+	// Get modules data
+	modulesId := bson.A{}
+	for _, module := range modules {
+		modulesId = append(modulesId, module.Module)
+	}
+
+	var modulesData []models.ModuleWithLookup
+
+	cursor, err = moduleModel.Aggreagate(mongo.Pipeline{
+		bson.D{{
+			Key: "$match",
+			Value: bson.M{
+				"_id": bson.M{
+					"$in": modulesId,
+				},
+			},
+		}},
+		getAddFields(),
+		getLookupSection(),
+		getLookupSubject(),
+		getLookupSemester(),
+		getProject(),
+	})
+	if err != nil {
+		return nil, totalModules, err
+	}
+	if err := cursor.All(db.Ctx, &modulesData); err != nil {
+		return nil, totalModules, err
+	}
+	// Get aws keys
+	if !simple {
+		var images []string
+		for i := 0; i < len(modulesData); i++ {
+			images = append(images, modulesData[i].Section.File.Key)
+		}
+		data, err := json.Marshal(images)
+		if err != nil {
+			return nil, totalModules, err
+		}
+		msg, err := nats.Request("get_aws_token_access", data)
+		if err != nil {
+			return nil, totalModules, err
+		}
+
+		var imagesURLs []string
+		json.Unmarshal(msg.Data, &imagesURLs)
+		// Add image URLs to modules
+		for i := 0; i < len(modulesData); i++ {
+			modulesData[i].Section.File.Url = imagesURLs[i]
+		}
+		// Get total of modules
+		if total {
+			totalOfDocuments, err := moduleHistoryModel.Use().CountDocuments(db.Ctx, bson.D{{
+				Key: "students",
+				Value: bson.M{
+					"$in": bson.A{idObjStudent},
+				},
+			}})
+			if err != nil {
+				return nil, totalModules, err
+			}
+			totalModules = int(totalOfDocuments)
+		}
+	}
+	return modulesData, totalModules, nil
+}
+
+func (module *ModulesService) GetAllModulesSemester() ([]models.Module, error) {
+	var modules []models.Module
+
+	cursor, err := moduleModel.GetAll(bson.D{{
+		Key:   "status",
+		Value: false,
+	}}, &options.FindOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if err := cursor.All(db.Ctx, &modules); err != nil {
+		return nil, err
+	}
+	return modules, nil
 }
 
 func (module *ModulesService) NewSubSection(
