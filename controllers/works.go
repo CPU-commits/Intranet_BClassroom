@@ -300,6 +300,7 @@ func (w *WorkController) UploadEvaluateFiles(c *gin.Context) {
 	claims, _ := services.NewClaimsFromContext(c)
 	idWork := c.Param("idWork")
 	idStudent := c.Param("idStudent")
+
 	if err := c.BindJSON(&evaluate); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
 			Success: false,
