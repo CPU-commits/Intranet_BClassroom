@@ -37,9 +37,9 @@ type Grade struct {
 	Module        primitive.ObjectID `json:"module" bson:"module"`
 	Student       primitive.ObjectID `json:"student" bson:"student"`
 	Program       primitive.ObjectID `json:"program" bson:"program"`
-	Acumulative   primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,,omitempty"`
+	Acumulative   primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty"`
 	IsAcumulative bool               `json:"is_acumulative" bson:"is_acumulative"`
-	Evaluator     primitive.ObjectID `json:"evaluator" bson:"evaluator"`
+	Evaluator     primitive.ObjectID `json:"evaluator" bson:"evaluator,omitempty"`
 	Grade         float64            `json:"grade" bson:"grade"`
 	Date          primitive.DateTime `json:"date" bson:"date"`
 }
@@ -50,7 +50,7 @@ type GradeWLookup struct {
 	Student     primitive.ObjectID `json:"student" bson:"student"`
 	Program     primitive.ObjectID `json:"program" bson:"program"`
 	Acumulative primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty"`
-	Evaluator   SimpleUser         `json:"evaluator" bson:"evaluator"`
+	Evaluator   SimpleUser         `json:"evaluator" bson:"evaluator,omitempty"`
 	Grade       float64            `json:"grade" bson:"grade"`
 	Date        primitive.DateTime `json:"date" bson:"date"`
 }
@@ -244,7 +244,6 @@ func initGrades(collections []string) error {
 			"module",
 			"student",
 			"program",
-			"evaluator",
 			"is_acumulative",
 			"grade",
 			"date",
