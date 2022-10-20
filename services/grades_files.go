@@ -8,9 +8,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/CPU-commits/Intranet_BClassroom/db"
+	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	"github.com/jung-kurt/gofpdf"
 	"github.com/xuri/excelize/v2"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -80,7 +83,8 @@ func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.Fi
 	return file, nil
 }
 
-func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
+func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w io.Writer) error {
+	// Init PDF
 	pdf := gofpdf.New("L", "mm", "A4", "")
 	pdf.AddUTF8Font("times_utf8", "", "./fonts/times.ttf")
 	defer pdf.Close()
@@ -111,9 +115,17 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
 		return err
 	}
 	// Get semester
-	semester, err := getCurrentSemester()
-	if err != nil {
-		return err
+	var semester *models.Semester
+	if idSemester == "" {
+		semester, err = getCurrentSemester()
+		if err != nil {
+			return err
+		}
+	} else {
+		semester, err = getSemester(idSemester)
+		if err != nil {
+			return err
+		}
 	}
 	pdf.SetFont("times_utf8", "", 10)
 	pdf.AddPage()
@@ -182,13 +194,28 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
 	)
 
 	// Subjects
-	courses, err := FindCourses(claims)
-	if err != nil {
-		return err
-	}
-	modulesData, err := moduleService.GetModules(courses, claims.UserType, true)
-	if err != nil {
-		return err
+	var modulesData []models.ModuleWithLookup
+	if idSemester == "" {
+		courses, err := FindCourses(claims)
+		if err != nil {
+			return err
+		}
+		modulesData, err = moduleService.GetModules(courses, claims.UserType, true)
+		if err != nil {
+			return err
+		}
+	} else {
+		modulesData, _, err = moduleService.GetModulesHistory(
+			claims.ID,
+			0,
+			0,
+			false,
+			true,
+			idSemester,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	var sumHeight float64 = 34
@@ -221,6 +248,7 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
 		// Print grades
 		var sum float64 = 60
 		var average float64
+
 		for i := 0; i < MAX_GRADES; i++ {
 			pdf.SetXY(sum, 34)
 
@@ -228,19 +256,23 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
 			// Get grade
 			for j, p := range program {
 				if p.Number == i+1 {
-					if !grades[j].IsAcumulative {
-						toPrint = strconv.Itoa(int(grades[j].Grade))
-						average += (grades[j].Grade * float64(p.Percentage)) / 100
-					} else if grades[j].IsAcumulative && len(grades[j].Acumulative) == len(p.Acumulative) {
-						var grade float64
-						for k, acu := range grades[j].Acumulative {
-							grade += (acu.Grade * float64(p.Acumulative[k].Percentage)) / 100
+					if grades[j] != nil {
+						if !grades[j].IsAcumulative {
+							toPrint = strconv.Itoa(int(grades[j].Grade))
+							average += (grades[j].Grade * float64(p.Percentage)) / 100
+						} else if grades[j].IsAcumulative && len(grades[j].Acumulative) == len(p.Acumulative) {
+							var grade float64
+							for k, acu := range grades[j].Acumulative {
+								if acu != nil {
+									grade += (acu.Grade * float64(p.Acumulative[k].Percentage)) / 100
+								}
+							}
+							grade = math.Round(grade)
+							toPrint = strconv.Itoa(int(grade))
+							average += (grade * float64(p.Percentage)) / 100
 						}
-						grade = math.Round(grade)
-						toPrint = strconv.Itoa(int(grade))
-						average += (grade * float64(p.Percentage)) / 100
+						break
 					}
-					break
 				}
 			}
 			pdf.CellFormat(
@@ -278,8 +310,73 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, w io.Writer) error {
 		averageFinal += average
 	}
 	averageFinal /= float64(len(averages))
+	if semester.Semester == 2 {
+		idObjStudent, err := primitive.ObjectIDFromHex(claims.ID)
+		if err != nil {
+			return err
+		}
+		// Get last semester
+		var _idSemester string
+		if idSemester == "" {
+			_idSemester = semester.ID.Hex()
+		} else {
+			_idSemester = idSemester
+		}
+		lastSemester, err := getLastSemester(_idSemester)
+		if err != nil {
+			return err
+		}
+		if lastSemester != nil {
+			// Get average
+			var average *models.Average
+			cursor := averageModel.GetOne(bson.D{
+				{
+					Key:   "semester",
+					Value: lastSemester.ID,
+				},
+				{
+					Key:   "student",
+					Value: idObjStudent,
+				},
+			})
+			if err := cursor.Decode(&average); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
+				return err
+			}
+			if average != nil {
+				pdf.SetY(sumHeight)
+
+				x := float64(5 + 42 + 30*7)
+				pdf.SetX(x)
+				pdf.CellFormat(
+					widthPromString,
+					4,
+					strconv.Itoa(int(average.Average)),
+					"1",
+					0,
+					"C",
+					false,
+					0,
+					"",
+				)
+
+				pdf.SetX(x - 15)
+				pdf.CellFormat(
+					15,
+					4,
+					"1° Sem:",
+					"1",
+					0,
+					"C",
+					false,
+					0,
+					"",
+				)
+			}
+		}
+	}
 	// 5 First margin, 55 subject, 30 times * 7 width grades
-	pdf.SetXY(5+55+30*7, sumHeight)
+	x := float64(5 + 55 + 30*7)
+	pdf.SetXY(x, sumHeight)
 	pdf.CellFormat(
 		widthPromString,
 		4,
