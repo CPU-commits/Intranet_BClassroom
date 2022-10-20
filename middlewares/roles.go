@@ -21,6 +21,5 @@ func RolesMiddleware(roles []string) gin.HandlerFunc {
 			Success: false,
 			Message: "Unauthorized",
 		})
-		return
 	}
 }

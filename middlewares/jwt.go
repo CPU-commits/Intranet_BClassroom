@@ -5,7 +5,6 @@ import (
 
 	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/services"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,7 +18,7 @@ func JWTMiddleware() gin.HandlerFunc {
 			})
 			return
 		}
-		if _, ok := token.Claims.(jwt.Claims); !ok && token.Valid {
+		if !token.Valid {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, res.Response{
 				Success: false,
 				Message: "Unauthorized",
