@@ -80,6 +80,7 @@ func (g *GradesController) GetStudentGrades(c *gin.Context) {
 
 func (g *GradesController) ExportGrades(c *gin.Context) {
 	idModule := c.Param("idModule")
+
 	c.Writer.Header().Set(
 		"Content-type",
 		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -111,6 +112,8 @@ func (g *GradesController) ExportGrades(c *gin.Context) {
 }
 
 func (g *GradesController) ExportGradesStudent(c *gin.Context) {
+	semester := c.DefaultQuery("semester", "")
+
 	claims, _ := services.NewClaimsFromContext(c)
 	c.Writer.Header().Set(
 		"Content-type",
@@ -118,7 +121,7 @@ func (g *GradesController) ExportGradesStudent(c *gin.Context) {
 	)
 
 	c.Stream(func(w io.Writer) bool {
-		err := gradesService.ExportGradesStudent(claims, w)
+		err := gradesService.ExportGradesStudent(claims, semester, w)
 		if err != nil {
 			fmt.Printf("err.Error(): %v\n", err.Error())
 			c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{

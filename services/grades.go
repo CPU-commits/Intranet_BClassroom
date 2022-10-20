@@ -63,6 +63,7 @@ func (g *GradesService) orderInSliceGradesStudent(
 	programs []models.GradesProgram,
 ) []*OrderedGrade {
 	orderedGrades := make([]*OrderedGrade, len(programs))
+
 	for i, program := range programs {
 		for _, grade := range grades {
 			if program.ID == grade.Program {
@@ -81,6 +82,7 @@ func (g *GradesService) orderInSliceGradesStudent(
 						grade.Acumulative,
 						program.Acumulative,
 					)
+					percentage := program.Acumulative[indexAcumulative].Percentage
 					acumulative[indexAcumulative] = &Acumulative{
 						ID:        grade.ID.Hex(),
 						Grade:     grade.Grade,
@@ -89,18 +91,19 @@ func (g *GradesService) orderInSliceGradesStudent(
 					}
 					// Add to grades
 					orderedGrades[i] = &OrderedGrade{
-						Grade:         (grade.Grade * float64(program.Percentage)) / 100,
+						Grade:         (grade.Grade * float64(percentage)) / 100,
 						IsAcumulative: true,
 						Acumulative:   acumulative,
 					}
 				} else {
-					// Grade
-					orderedGrades[i].Grade += (grade.Grade * float64(program.Percentage)) / 100
 					// Add to acumulative
 					indexAcumulative := g.getIndexAcumulative(
 						grade.Acumulative,
 						program.Acumulative,
 					)
+					percentage := program.Acumulative[indexAcumulative].Percentage
+					// Grade
+					orderedGrades[i].Grade += (grade.Grade * float64(percentage)) / 100
 					orderedGrades[i].Acumulative[indexAcumulative] = &Acumulative{
 						ID:        grade.ID.Hex(),
 						Grade:     grade.Grade,
