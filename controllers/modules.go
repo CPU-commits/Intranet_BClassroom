@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
@@ -73,6 +74,53 @@ func (modules *ModulesController) GetModules(c *gin.Context) {
 	// Response
 	response := make(map[string]interface{})
 	response["modules"] = modulesData
+	c.JSON(200, res.Response{
+		Success: true,
+		Data:    response,
+	})
+}
+
+func (module *ModulesController) GetModulesHistory(c *gin.Context) {
+	total := c.DefaultQuery("total", "false")
+	limit := c.DefaultQuery("limit", "20")
+	skip := c.DefaultQuery("skip", "0")
+	claims, _ := services.NewClaimsFromContext(c)
+
+	limitNum, err := strconv.Atoi(limit)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: "Limit must be a number",
+		})
+		return
+	}
+	skipNum, err := strconv.Atoi(skip)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: "Skip must be a number",
+		})
+		return
+	}
+	modules, totalModules, err := moduleService.GetModulesHistory(
+		claims.ID,
+		limitNum,
+		skipNum,
+		total == "true",
+		false,
+		"",
+	)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Response
+	response := make(map[string]interface{})
+	response["modules"] = modules
+	response["total"] = totalModules
 	c.JSON(200, res.Response{
 		Success: true,
 		Data:    response,
