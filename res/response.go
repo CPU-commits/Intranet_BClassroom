@@ -20,3 +20,9 @@ type NotifyClassroom struct {
 	Type   string
 	IDUser string
 }
+
+// Error Response
+type ErrorRes struct {
+	Err        error
+	StatusCode int
+}

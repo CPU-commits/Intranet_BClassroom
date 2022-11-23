@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	"reflect"
 	"sync"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	natsPackage "github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -23,7 +25,7 @@ func init() {
 	closeGrades()
 }
 
-func FindCourses(claims *Claims) ([]ModuleIDs, error) {
+func FindCourses(claims *Claims) ([]ModuleIDs, *res.ErrorRes) {
 	filter := bson.D{
 		{
 			Key:   "user",
@@ -36,14 +38,16 @@ func FindCourses(claims *Claims) ([]ModuleIDs, error) {
 		cursor := studentModel.GetOne(filter)
 		err := cursor.Decode(&studentData)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		if studentData.Course.IsZero() {
-			return nil, fmt.Errorf("No estás asignado a ningún curso")
-		}
-
-		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        fmt.Errorf("No estás asignado a ningún curso"),
+				StatusCode: http.StatusForbidden,
+			}
 		}
 		return []ModuleIDs{{
 			IDCourse: studentData.Course,
@@ -54,10 +58,16 @@ func FindCourses(claims *Claims) ([]ModuleIDs, error) {
 		cursor := teacherModel.GetOne(filter)
 		err := cursor.Decode(&teacherData)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		if len(teacherData.Imparted) == 0 {
-			return nil, fmt.Errorf("No tienes ningún curso asignado")
+			return nil, &res.ErrorRes{
+				Err:        fmt.Errorf("No tienes ningún curso asignado"),
+				StatusCode: http.StatusForbidden,
+			}
 		}
 
 		var courses []ModuleIDs
@@ -73,9 +83,9 @@ func FindCourses(claims *Claims) ([]ModuleIDs, error) {
 
 func AuthorizedRouteFromIdModule(idModule string, claims *Claims) error {
 	// Get courses
-	courses, err := FindCourses(claims)
-	if err != nil {
-		return err
+	courses, errRes := FindCourses(claims)
+	if errRes != nil {
+		return errRes.Err
 	}
 	// Get module
 	module, err := moduleService.GetModuleFromID(idModule)
@@ -256,8 +266,8 @@ func validateDirectivesModule() {
 		}
 		// Validate directives
 		idModule := payload["module"].(string)
-		programs, err := gradesService.GetGradePrograms(idModule)
-		if err != nil {
+		programs, errRes := gradesService.GetGradePrograms(idModule)
+		if errRes != nil {
 			return
 		}
 
@@ -358,17 +368,17 @@ func closeGrades() {
 
 				idModule := module.ID.Hex()
 				// Get grades program
-				programs, err := gradesService.GetGradePrograms(idModule)
-				if err != nil {
-					*errRet = err
-					<-c
+				programs, errRes := gradesService.GetGradePrograms(idModule)
+				if errRes != nil {
+					*errRet = errRes.Err
+					close(c)
 					return
 				}
 				// Get module students
 				students, err := workService.getStudentsFromIdModule(idModule)
 				if err != nil {
 					*errRet = err
-					<-c
+					close(c)
 					return
 				}
 
@@ -391,10 +401,10 @@ func closeGrades() {
 					// Register grades
 					idObjStudent, _ := primitive.ObjectIDFromHex(student.User.ID)
 
-					grades, err := gradesService.GetStudentGrades(idModule, student.User.ID)
-					if err != nil {
-						*errRet = err
-						<-c
+					grades, errRes := gradesService.GetStudentGrades(idModule, student.User.ID)
+					if errRes != nil {
+						*errRet = errRes.Err
+						close(c)
 						return
 					}
 					// Evaluate grades
@@ -464,18 +474,18 @@ func closeGrades() {
 					close(cS)
 					return
 				}
-				courses, err := FindCourses(&Claims{
+				courses, errRes := FindCourses(&Claims{
 					ID:       student.User.ID,
 					UserType: models.STUDENT,
 				})
-				if err != nil {
-					*errRet = err
+				if errRes != nil {
+					*errRet = errRes.Err
 					close(cS)
 					return
 				}
-				modules, err := modulesService.GetModules(courses, models.STUDENT, true)
-				if err != nil {
-					*errRet = err
+				modules, errRes := modulesService.GetModules(courses, models.STUDENT, true)
+				if errRes != nil {
+					*errRet = errRes.Err
 					close(cS)
 					return
 				}
@@ -483,17 +493,17 @@ func closeGrades() {
 				var average float64
 				var haveAverage bool
 				for _, module := range modules {
-					program, err := gradesService.GetGradePrograms(module.ID.Hex())
-					if err != nil {
-						*errRet = err
+					program, errRes := gradesService.GetGradePrograms(module.ID.Hex())
+					if errRes != nil {
+						*errRet = errRes.Err
 						close(cS)
 						return
 					}
 					if len(program) > 0 {
 						haveAverage = true
-						grades, err := gradesService.GetStudentGrades(module.ID.Hex(), student.User.ID)
-						if err != nil {
-							*errRet = err
+						grades, errRes := gradesService.GetStudentGrades(module.ID.Hex(), student.User.ID)
+						if errRes != nil {
+							*errRet = errRes.Err
 							close(cS)
 							return
 						}

@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"net/http"
 	"sort"
 	"sync"
 
@@ -21,10 +22,13 @@ var gradesService *GradesService
 
 type GradesService struct{}
 
-func (g *GradesService) GetGradePrograms(idModule string) ([]models.GradesProgram, error) {
+func (g *GradesService) GetGradePrograms(idModule string) ([]models.GradesProgram, *res.ErrorRes) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get
 	var programs []models.GradesProgram
@@ -35,10 +39,16 @@ func (g *GradesService) GetGradePrograms(idModule string) ([]models.GradesProgra
 		},
 	}, &options.FindOptions{})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursor.All(db.Ctx, &programs); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	sort.Slice(programs, func(i, j int) bool {
 		return programs[i].Number < programs[j].Number
@@ -117,34 +127,46 @@ func (g *GradesService) orderInSliceGradesStudent(
 	return orderedGrades
 }
 
-func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, error) {
+func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res.ErrorRes) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get students
 	students, err := workService.getStudentsFromIdModule(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get grades programs
-	programs, err := g.GetGradePrograms(idModule)
-	if err != nil {
-		return nil, err
+	programs, errRes := g.GetGradePrograms(idModule)
+	if errRes.Err != nil {
+		return nil, errRes
 	}
 	// Get students grades
 	studentsGrades := make([]StudentGrade, len(students))
 	var wg sync.WaitGroup
+	c := make(chan int, 5)
 
 	for i, student := range students {
 		wg.Add(1)
+		c <- 1
 
-		go func(student Student, i int, errRet *error, wg *sync.WaitGroup) {
+		go func(student Student, i int, errRet *res.ErrorRes, wg *sync.WaitGroup) {
 			defer wg.Done()
 
 			idObjStudent, err := primitive.ObjectIDFromHex(student.User.ID)
 			if err != nil {
-				*errRet = err
+				errRet = &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusBadRequest,
+				}
+				close(c)
 				return
 			}
 			// Student
@@ -192,11 +214,19 @@ func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, erro
 				project,
 			})
 			if err != nil {
-				*errRet = err
+				errRet = &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
+				close(c)
 				return
 			}
 			if err := cursor.All(db.Ctx, &grades); err != nil {
-				*errRet = err
+				errRet = &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
+				close(c)
 				return
 			}
 			// Order grades
@@ -204,28 +234,35 @@ func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, erro
 			studentGrade.Grades = orderedGrades
 
 			studentsGrades[i] = studentGrade
-		}(student, i, &err, &wg)
+			<-c
+		}(student, i, errRes, &wg)
 	}
 	wg.Wait()
-	if err != nil {
-		return nil, err
+	if errRes.Err != nil {
+		return nil, errRes
 	}
 	return studentsGrades, nil
 }
 
-func (g *GradesService) GetStudentGrades(idModule, idStudent string) ([]*OrderedGrade, error) {
+func (g *GradesService) GetStudentGrades(idModule, idStudent string) ([]*OrderedGrade, *res.ErrorRes) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get grades programs
-	programs, err := g.GetGradePrograms(idModule)
-	if err != nil {
-		return nil, err
+	programs, errRes := g.GetGradePrograms(idModule)
+	if errRes.Err != nil {
+		return nil, errRes
 	}
 	// Get grades
 	var grades []models.GradeWLookup
@@ -268,10 +305,16 @@ func (g *GradesService) GetStudentGrades(idModule, idStudent string) ([]*Ordered
 		project,
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursor.All(db.Ctx, &grades); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Order grades
 	orderedGrades := g.orderInSliceGradesStudent(grades, programs)
@@ -287,10 +330,13 @@ func (g *GradesService) getProgramGradeById(idObjProgram primitive.ObjectID) (*m
 	return program, nil
 }
 
-func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule string) (interface{}, error) {
+func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule string) (interface{}, *res.ErrorRes) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 
 	// Program does not exist
@@ -306,10 +352,16 @@ func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule 
 		},
 	})
 	if err := cursor.Decode(&pgData); err != nil && err.Error() != "mongo: no documents in result" {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if pgData != nil {
-		return nil, fmt.Errorf("Esta calificación ya está programada")
+		return nil, &res.ErrorRes{
+			Err:        fmt.Errorf("Esta calificación ya está programada"),
+			StatusCode: http.StatusConflict,
+		}
 	}
 	// Percentage
 	type Percentage struct {
@@ -341,20 +393,32 @@ func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule 
 		group,
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursorP.All(db.Ctx, &percentage); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if len(percentage) > 0 && percentage[0].Total+program.Percentage > 100 {
-		return nil, fmt.Errorf(
-			"El porcentaje indicado superado el 100 por ciento. Queda %v por ciento libre",
-			100-percentage[0].Total,
-		)
+		return nil, &res.ErrorRes{
+			Err: fmt.Errorf(
+				"El porcentaje indicado superado el 100 por ciento. Queda %v por ciento libre",
+				100-percentage[0].Total,
+			),
+			StatusCode: http.StatusBadRequest,
+		}
 	} else if program.Percentage > 100 {
-		return nil, fmt.Errorf(
-			"El porcentaje indicado superado el 100 por ciento.",
-		)
+		return nil, &res.ErrorRes{
+			Err: fmt.Errorf(
+				"El porcentaje indicado superado el 100 por ciento.",
+			),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Validate acumulative
 	if *program.IsAcumulative {
@@ -363,16 +427,22 @@ func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule 
 			sum += acumulative.Percentage
 		}
 		if sum != 100 {
-			return nil, fmt.Errorf(
-				"El porcentaje sumatorio de las calificaciones acumulativas debe ser exactamente 100 por cierto",
-			)
+			return nil, &res.ErrorRes{
+				Err: fmt.Errorf(
+					"El porcentaje sumatorio de las calificaciones acumulativas debe ser exactamente 100 por cierto",
+				),
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 	}
 	// Insert
 	model := models.NewModelGradesProgram(program, idObjModule)
 	insertedProgram, err := gradeProgramModel.NewDocument(model)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return insertedProgram.InsertedID, nil
 }
@@ -382,47 +452,74 @@ func (g *GradesService) UploadGrade(
 	idModule,
 	idStudent,
 	idUser string,
-) (interface{}, error) {
+) (interface{}, *res.ErrorRes) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjProgram, err := primitive.ObjectIDFromHex(grade.Program)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get module
 	module, err := moduleService.GetModuleFromID(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Evaluate grade
 	min, max, err := GetMinNMaxGrade()
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if *grade.Grade < float64(min) || *grade.Grade > float64(max) {
-		return nil, fmt.Errorf("Calificación inválida. Mín: %v. Máx: %v", min, max)
+		return nil, &res.ErrorRes{
+			Err:        fmt.Errorf("Calificación inválida. Mín: %v. Máx: %v", min, max),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get program
 	program, err := g.getProgramGradeById(idObjProgram)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 
 	idAcumulative := primitive.NilObjectID
 	if program.IsAcumulative {
 		idObjAcumulative, err := primitive.ObjectIDFromHex(grade.Acumulative)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		var exists bool
 		for _, acumulative := range program.Acumulative {
@@ -432,7 +529,10 @@ func (g *GradesService) UploadGrade(
 			}
 		}
 		if !exists {
-			return nil, fmt.Errorf("La calificación acumulativa no existe")
+			return nil, &res.ErrorRes{
+				Err:        fmt.Errorf("La calificación acumulativa no existe"),
+				StatusCode: http.StatusConflict,
+			}
 		}
 	}
 	// Get grade
@@ -459,10 +559,16 @@ func (g *GradesService) UploadGrade(
 	}
 	cursor := gradeModel.GetOne(filter)
 	if err := cursor.Decode(&gradeData); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if gradeData != nil {
-		return nil, fmt.Errorf("No se puede agregar una calificación ya subida")
+		return nil, &res.ErrorRes{
+			Err:        fmt.Errorf("No se puede agregar una calificación ya subida"),
+			StatusCode: http.StatusConflict,
+		}
 	}
 	// Insert grade
 	modelGrade := models.NewModelGrade(
@@ -476,7 +582,10 @@ func (g *GradesService) UploadGrade(
 	)
 	inserted, err := gradeModel.NewDocument(modelGrade)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Send notifications
 	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
@@ -493,26 +602,41 @@ func (g *GradesService) UploadGrade(
 	return inserted.InsertedID, nil
 }
 
-func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) error {
+func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) *res.ErrorRes {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjProgram, err := primitive.ObjectIDFromHex(idProgram)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get grade program
 	var gradeProgram models.GradesProgram
 	cursor := gradeProgramModel.GetByID(idObjProgram)
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
-			return fmt.Errorf("No existe la programación de calificación")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("No existe la programación de calificación"),
+				StatusCode: http.StatusNotFound,
+			}
 		}
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if idObjModule != gradeProgram.Module {
-		return fmt.Errorf("Esta programación de calificación no pertenece al módulo indicado")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Esta programación de calificación no pertenece al módulo indicado"),
+			StatusCode: http.StatusConflict,
+		}
 	}
 	// Get work in use
 	var work *models.Work
@@ -521,10 +645,16 @@ func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) error {
 		Value: idObjProgram,
 	}})
 	if err := cursor.Decode(&work); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if work != nil {
-		return fmt.Errorf("Esta programación está en uso en el trabajo %s", work.Title)
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Esta programación está en uso en el trabajo %s", work.Title),
+			StatusCode: http.StatusConflict,
+		}
 	}
 	// Get grade in use
 	var allGrades bson.A
@@ -545,10 +675,16 @@ func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) error {
 		Value: allGrades,
 	}})
 	if err := cursor.Decode(&grade); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if grade != nil {
-		return fmt.Errorf("Esta programación está en uso en alguna calificación")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Esta programación está en uso en alguna calificación"),
+			StatusCode: http.StatusConflict,
+		}
 	}
 	// Delete grade
 	_, err = gradeProgramModel.Use().DeleteOne(db.Ctx, bson.D{{
@@ -556,50 +692,80 @@ func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) error {
 		Value: idObjProgram,
 	}})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return nil
 }
 
-func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGrade string) error {
+func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGrade string) *res.ErrorRes {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjGrade, err := primitive.ObjectIDFromHex(idGrade)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get grade
 	var gradeData *models.Grade
 	cursor := gradeModel.GetByID(idObjGrade)
 	if err := cursor.Decode(&gradeData); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if gradeData.Module != idObjModule {
-		return fmt.Errorf("Esta calificación no pertenece al módulo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Esta calificación no pertenece al módulo"),
+			StatusCode: http.StatusConflict,
+		}
 	}
 	// Get grade program
 	var gradeProgram models.GradesProgram
 	cursor = gradeProgramModel.GetByID(gradeData.Program)
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
-			return fmt.Errorf("No existe la programación de calificación")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("No existe la programación de calificación"),
+				StatusCode: http.StatusNotFound,
+			}
 		}
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get module
 	module, err := moduleService.GetModuleFromID(idModule)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Min max
 	min, max, err := GetMinNMaxGrade()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if float64(min) > *grade.Grade || float64(max) < *grade.Grade {
-		return fmt.Errorf("Calificación inválida. Mín: %v. Máx: %v", min, max)
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Calificación inválida. Mín: %v. Máx: %v", min, max),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Update
 	_, err = gradeModel.Use().UpdateByID(db.Ctx, idObjGrade, bson.D{{
@@ -609,7 +775,10 @@ func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGr
 		},
 	}})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Send notifications
 	nats.PublishEncode("notify/classroom", res.NotifyClassroom{

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	"github.com/jung-kurt/gofpdf"
 	"github.com/xuri/excelize/v2"
@@ -17,20 +19,23 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.File, error) {
+func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.File, *res.ErrorRes) {
 	_, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get grades
-	data, err := g.GetStudentsGrades(idModule)
-	if err != nil {
-		return nil, err
+	data, errRes := g.GetStudentsGrades(idModule)
+	if errRes != nil {
+		return nil, errRes
 	}
 	// Get programs
-	programs, err := g.GetGradePrograms(idModule)
-	if err != nil {
-		return nil, err
+	programs, errRes := g.GetGradePrograms(idModule)
+	if errRes.Err != nil {
+		return nil, errRes
 	}
 	// Init file
 	file := excelize.NewFile()
@@ -78,12 +83,15 @@ func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.Fi
 	}
 
 	if err := file.Write(w); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusNotExtended,
+		}
 	}
 	return file, nil
 }
 
-func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w io.Writer) error {
+func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w io.Writer) *res.ErrorRes {
 	// Init PDF
 	pdf := gofpdf.New("L", "mm", "A4", "")
 	pdf.AddUTF8Font("times_utf8", "", "./fonts/times.ttf")
@@ -91,40 +99,61 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 
 	data, err := formatRequestToNestjsNats("")
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	msg, err := nats.Request("get_college_data", data)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 
 	// Get college data
 	var response stack.NatsNestJSRes
 	err = json.Unmarshal(msg.Data, &response)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
 	// Decode data
 	var collegeData map[string]string
 	jsonString, err := json.Marshal(response.Response)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
 	err = json.Unmarshal(jsonString, &collegeData)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
 	// Get semester
 	var semester *models.Semester
 	if idSemester == "" {
 		semester, err = getCurrentSemester()
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	} else {
 		semester, err = getSemester(idSemester)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	pdf.SetFont("times_utf8", "", 10)
@@ -205,7 +234,8 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 			return err
 		}
 	} else {
-		modulesData, _, err = moduleService.GetModulesHistory(
+		var errRes *res.ErrorRes
+		modulesData, _, errRes = moduleService.GetModulesHistory(
 			claims.ID,
 			0,
 			0,
@@ -213,8 +243,8 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 			true,
 			idSemester,
 		)
-		if err != nil {
-			return err
+		if errRes != nil {
+			return errRes
 		}
 	}
 
@@ -241,8 +271,8 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 			return err
 		}
 		// Get program grades
-		program, err := g.GetGradePrograms(module.ID.Hex())
-		if err != nil {
+		program, errRes := g.GetGradePrograms(module.ID.Hex())
+		if errRes.Err != nil {
 			return err
 		}
 		// Print grades
@@ -313,7 +343,10 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 	if semester.Semester == 2 {
 		idObjStudent, err := primitive.ObjectIDFromHex(claims.ID)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		// Get last semester
 		var _idSemester string
@@ -324,7 +357,10 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 		}
 		lastSemester, err := getLastSemester(_idSemester)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		if lastSemester != nil {
 			// Get average
@@ -340,7 +376,10 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 				},
 			})
 			if err := cursor.Decode(&average); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			if average != nil {
 				pdf.SetY(sumHeight)
@@ -390,7 +429,10 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 	)
 
 	if err := pdf.Output(w); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusNotExtended,
+		}
 	}
 	return nil
 }

@@ -2,11 +2,13 @@ package services
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -31,10 +33,13 @@ func (f *FormService) getLookupQuestions() bson.D {
 	}
 }
 
-func (f *FormService) GetFormsUser(userId string) ([]models.Form, error) {
+func (f *FormService) GetFormsUser(userId string) ([]models.Form, *res.ErrorRes) {
 	userObjId, err := primitive.ObjectIDFromHex(userId)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get
 	match := bson.D{
@@ -70,10 +75,16 @@ func (f *FormService) GetFormsUser(userId string) ([]models.Form, error) {
 		project,
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err = cursor.All(db.Ctx, &forms); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 
 	return forms, nil
@@ -88,14 +99,20 @@ func (f *FormService) GetFormById(idForm primitive.ObjectID) (*models.Form, erro
 	return form, nil
 }
 
-func (f *FormService) GetForm(idForm, idUser string, onlyAuthor bool) ([]models.FormWLookup, error) {
+func (f *FormService) GetForm(idForm, idUser string, onlyAuthor bool) ([]models.FormWLookup, *res.ErrorRes) {
 	idFormObj, err := primitive.ObjectIDFromHex(idForm)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get
 	match := bson.D{}
@@ -186,18 +203,27 @@ func (f *FormService) GetForm(idForm, idUser string, onlyAuthor bool) ([]models.
 		replaceRoot,
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err = cursor.All(db.Ctx, &form); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return form, nil
 }
 
-func (f *FormService) UploadForm(form *forms.FormForm, userId string) error {
+func (f *FormService) UploadForm(form *forms.FormForm, userId string) *res.ErrorRes {
 	userObjId, err := primitive.ObjectIDFromHex(userId)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Insert questions
 	var questionsIds [][]primitive.ObjectID
@@ -228,7 +254,10 @@ func (f *FormService) UploadForm(form *forms.FormForm, userId string) error {
 		}
 		inserts, err := formQuestionModel.Use().InsertMany(db.Ctx, questions)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 
 		var ids []primitive.ObjectID
@@ -242,31 +271,49 @@ func (f *FormService) UploadForm(form *forms.FormForm, userId string) error {
 
 	_, err = formModel.NewDocument(formData)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return nil
 }
 
-func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) error {
+func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) *res.ErrorRes {
 	userObjId, err := primitive.ObjectIDFromHex(userId)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idFormObj, err := primitive.ObjectIDFromHex(idForm)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get form
 	var formData *models.Form
 	cursor := formModel.GetByID(idFormObj)
 	if err := cursor.Decode(&formData); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if !formData.Status {
-		return fmt.Errorf("Este formulario no está disponible")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este formulario no está disponible"),
+			StatusCode: http.StatusForbidden,
+		}
 	}
 	if formData.Author != userObjId {
-		return fmt.Errorf("No tienes acceso para editar este formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No tienes acceso para editar este formulario"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Get work
 	var work []models.Work
@@ -275,14 +322,23 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 		Value: idFormObj,
 	}}, &options.FindOptions{})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursorW.All(db.Ctx, &work); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	for _, work := range work {
 		if work.IsRevised {
-			return fmt.Errorf("Este formulario está asignado a un trabajo revisado, no se puede editar")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("Este formulario está asignado a un trabajo revisado, no se puede editar"),
+				StatusCode: http.StatusForbidden,
+			}
 		}
 	}
 	// Update form
@@ -297,7 +353,10 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 		idObjItem, err := primitive.ObjectIDFromHex(item.ID)
 
 		if err != nil && item.ID != "" {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		var questionsIds []primitive.ObjectID
 		// Individual points question
@@ -327,7 +386,10 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 			}
 			inserts, err := formQuestionModel.Use().InsertMany(db.Ctx, questions)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 
 			var ids []primitive.ObjectID
@@ -342,7 +404,10 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 				idObjQuestion, err := primitive.ObjectIDFromHex(question.ID)
 
 				if err != nil && question.ID != "" {
-					return err
+					return &res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusBadRequest,
+					}
 				}
 				// Insert or update
 				if item.Type == "custom" {
@@ -364,7 +429,10 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 					}
 					_, err := formQuestionModel.NewDocument(questionData)
 					if err != nil {
-						return err
+						return &res.ErrorRes{
+							Err:        err,
+							StatusCode: http.StatusServiceUnavailable,
+						}
 					}
 
 					questionsIds = append(questionsIds, newId)
@@ -402,7 +470,10 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 						},
 					)
 					if err != nil {
-						return err
+						return &res.ErrorRes{
+							Err:        err,
+							StatusCode: http.StatusServiceUnavailable,
+						}
 					}
 					questionsIds = append(questionsIds, idObjQuestion)
 				}
@@ -424,32 +495,50 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) er
 		},
 	})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return nil
 }
 
-func (f *FormService) DeleteForm(idForm, idUser string) error {
+func (f *FormService) DeleteForm(idForm, idUser string) *res.ErrorRes {
 	idObjForm, err := primitive.ObjectIDFromHex(idForm)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get form
 	var form models.Form
 
 	cursor := formModel.GetByID(idObjForm)
 	if err := cursor.Decode(&form); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if !form.Status {
-		return fmt.Errorf("Este formulario ya está eliminado")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este formulario ya está eliminado"),
+			StatusCode: http.StatusForbidden,
+		}
 	}
 	if form.Author != idObjUser {
-		return fmt.Errorf("No estás autorizado a eliminar este formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No estás autorizado a eliminar este formulario"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Delete
 	_, err = formModel.Use().UpdateByID(db.Ctx, idObjForm, bson.D{
@@ -461,7 +550,10 @@ func (f *FormService) DeleteForm(idForm, idUser string) error {
 		},
 	})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return nil
 }

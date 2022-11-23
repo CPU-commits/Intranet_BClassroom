@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"math"
 	"mime/multipart"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -31,59 +32,23 @@ var workService *WorkSerice
 
 type WorkSerice struct{}
 
-func (w *WorkSerice) GetLookupUser() bson.D {
-	return bson.D{
-		{
-			Key: "$lookup",
-			Value: bson.M{
-				"from":         models.USERS_COLLECTION,
-				"localField":   "author",
-				"foreignField": "_id",
-				"as":           "author",
-				"pipeline": bson.A{bson.M{
-					"$project": bson.M{
-						"name":           1,
-						"first_lastname": 1,
-					},
-				}},
-			},
-		},
-	}
-}
-
-func (w *WorkSerice) GetLookupGrade() bson.D {
-	return bson.D{
-		{
-			Key: "$lookup",
-			Value: bson.M{
-				"from":         models.GRADES_PROGRAM_COLLECTION,
-				"localField":   "grade",
-				"foreignField": "_id",
-				"as":           "grade",
-				"pipeline": bson.A{bson.M{
-					"$project": bson.M{
-						"module": 0,
-					},
-				}},
-			},
-		},
-	}
-}
-
-func (w *WorkSerice) GetModulesWorks(claims Claims) (interface{}, error) {
+func (w *WorkSerice) GetModulesWorks(claims Claims) ([]WorkStatus, *res.ErrorRes) {
 	idObjUser, err := primitive.ObjectIDFromHex(claims.ID)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 
 	// Get modules
-	courses, err := FindCourses(&claims)
-	if err != nil {
-		return nil, err
+	courses, errRes := FindCourses(&claims)
+	if errRes != nil {
+		return nil, errRes
 	}
-	modules, err := moduleService.GetModules(courses, claims.UserType, true)
-	if err != nil {
-		return nil, err
+	modules, errRes := moduleService.GetModules(courses, claims.UserType, true)
+	if errRes != nil {
+		return nil, errRes
 	}
 	var modulesOr bson.A
 	for _, module := range modules {
@@ -128,30 +93,27 @@ func (w *WorkSerice) GetModulesWorks(claims Claims) (interface{}, error) {
 		project,
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursor.All(db.Ctx, &works); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get status
-	type WorkStatus struct {
-		Title       string    `json:"title"`
-		IsQualified bool      `json:"is_qualified"`
-		Type        string    `json:"type"`
-		Module      string    `json:"module"`
-		ID          string    `json:"_id"`
-		DateStart   time.Time `json:"date_start"`
-		DateLimit   time.Time `json:"date_limit"`
-		DateUpload  time.Time `json:"date_upload"`
-		Status      int       `json:"status"`
-	}
 	workStatus := make([]WorkStatus, len(works))
 	var wg sync.WaitGroup
+	c := make(chan (int), 5)
 
 	for i, work := range works {
 		wg.Add(1)
+		c <- 1
 
-		go func(work models.Work, i int, wg *sync.WaitGroup, errRet *error) {
+		go func(work models.Work, i int, wg *sync.WaitGroup, errRet *res.ErrorRes) {
 			defer wg.Done()
 
 			workStatus[i] = WorkStatus{
@@ -178,7 +140,11 @@ func (w *WorkSerice) GetModulesWorks(claims Claims) (interface{}, error) {
 					},
 				})
 				if err := cursor.Decode(&fUC); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-					*errRet = err
+					errRet = &res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusServiceUnavailable,
+					}
+					close(c)
 					return
 				}
 				if fUC != nil {
@@ -198,7 +164,11 @@ func (w *WorkSerice) GetModulesWorks(claims Claims) (interface{}, error) {
 					},
 				})
 				if err := cursor.Decode(&formAccess); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-					*errRet = err
+					errRet = &res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusServiceUnavailable,
+					}
+					close(c)
 					return
 				}
 				if formAccess != nil {
@@ -209,11 +179,12 @@ func (w *WorkSerice) GetModulesWorks(claims Claims) (interface{}, error) {
 					}
 				}
 			}
-		}(work, i, &wg, &err)
+			<-c
+		}(work, i, &wg, errRes)
 	}
 	wg.Wait()
-	if err != nil {
-		return nil, err
+	if errRes != nil {
+		return nil, errRes
 	}
 	// Order by status asc
 	sort.Slice(workStatus, func(i, j int) bool {
@@ -222,211 +193,47 @@ func (w *WorkSerice) GetModulesWorks(claims Claims) (interface{}, error) {
 	return workStatus, nil
 }
 
-func (w *WorkSerice) GetWorks(idModule string) ([]models.WorkWLookup, error) {
+func (w *WorkSerice) GetWorks(idModule string) ([]models.WorkWLookup, *res.ErrorRes) {
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get
-	var works []models.WorkWLookup
-
-	match := bson.D{
-		{
-			Key: "$match",
-			Value: bson.M{
-				"module": idObjModule,
-			},
-		},
-	}
-	lookupUser := w.GetLookupUser()
-	lookupGrade := w.GetLookupGrade()
-	project := bson.D{
-		{
-			Key: "$project",
-			Value: bson.M{
-				"title":        1,
-				"is_qualified": 1,
-				"type":         1,
-				"date_start":   1,
-				"date_limit":   1,
-				"date_upload":  1,
-				"is_revised":   1,
-				"date_update":  1,
-				"acumulative":  1,
-				"author": bson.M{
-					"$arrayElemAt": bson.A{"$author", 0},
-				},
-				"grade": bson.M{
-					"$arrayElemAt": bson.A{"$grade", 0},
-				},
-			},
-		},
-	}
-	order := bson.D{
-		{
-			Key: "$sort",
-			Value: bson.M{
-				"date_upload": -1,
-			},
-		},
-	}
-	cursor, err := workModel.Aggreagate(mongo.Pipeline{
-		match,
-		lookupUser,
-		lookupGrade,
-		project,
-		order,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := cursor.All(db.Ctx, &works); err != nil {
-		return nil, err
-	}
-
-	for i, work := range works {
-		if !work.Acumulative.IsZero() {
-			var acumulative []models.Acumulative
-			for _, acu := range work.Grade.Acumulative {
-				if acu.ID == work.Acumulative {
-					acumulative = append(acumulative, acu)
-				}
-			}
-			works[i].Grade.Acumulative = acumulative
-		}
+	works, errRes := workRepository.GetWorks(idObjModule)
+	if errRes != nil {
+		return nil, errRes
 	}
 	return works, nil
 }
 
-func (w *WorkSerice) getWorkFromId(idWork primitive.ObjectID) (*models.Work, error) {
-	var work *models.Work
-	cursor := workModel.GetByID(idWork)
-	if err := cursor.Decode(&work); err != nil {
-		return nil, err
-	}
-	return work, nil
-}
-
-func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interface{}, error) {
+func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interface{}, *res.ErrorRes) {
 	idObjUser, err := primitive.ObjectIDFromHex(claims.ID)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
-	// Get
-	var works []models.WorkWLookupNFiles
-
-	match := bson.D{{
-		Key: "$match",
-		Value: bson.M{
-			"_id": idObjWork,
-		},
-	}}
-	setAuthorNGrade := bson.D{{
-		Key: "$set",
-		Value: bson.M{
-			"author": bson.M{
-				"$first": "$author",
-			},
-			"grade": bson.M{
-				"$first": "$grade",
-			},
-		},
-	}}
-	unwindAttached := bson.D{{
-		Key: "$unwind",
-		Value: bson.M{
-			"path":                       "$attached",
-			"preserveNullAndEmptyArrays": true,
-		},
-	}}
-	lookupFile := bson.D{{
-		Key: "$lookup",
-		Value: bson.M{
-			"from":         models.FILES_COLLECTION,
-			"localField":   "attached.file",
-			"foreignField": "_id",
-			"as":           "attached.file",
-		},
-	}}
-	setFirstFile := bson.D{{
-		Key: "$set",
-		Value: bson.M{
-			"attached.file": bson.M{
-				"$first": "$attached.file",
-			},
-		},
-	}}
-	groupAttached := bson.D{{
-		Key: "$group",
-		Value: bson.M{
-			"_id": "$_id",
-			"attached": bson.M{
-				"$push": "$attached",
-			},
-		},
-	}}
-	lookupWork := bson.D{{
-		Key: "$lookup",
-		Value: bson.M{
-			"from":         models.WORKS_COLLECTION,
-			"localField":   "_id",
-			"foreignField": "_id",
-			"as":           "result",
-			"pipeline": bson.A{bson.D{{
-				Key: "$project",
-				Value: bson.M{
-					"attached": 0,
-				},
-			}}},
-		},
-	}}
-	unwindResult := bson.D{{
-		Key: "$unwind",
-		Value: bson.M{
-			"path": "$result",
-		},
-	}}
-	addFields := bson.D{{
-		Key: "$addFields",
-		Value: bson.M{
-			"result.attached": "$attached",
-		},
-	}}
-	replaceRoot := bson.D{{
-		Key: "$replaceRoot",
-		Value: bson.M{
-			"newRoot": "$result",
-		},
-	}}
-
-	cursor, err := workModel.Aggreagate(mongo.Pipeline{
-		match,
-		unwindAttached,
-		lookupFile,
-		setFirstFile,
-		groupAttached,
-		lookupWork,
-		unwindResult,
-		addFields,
-		replaceRoot,
-		w.GetLookupUser(),
-		w.GetLookupGrade(),
-		setAuthorNGrade,
-	})
-	if err != nil {
-		return nil, err
+	// Get work
+	work, errRes := workRepository.GetWork(idObjWork)
+	if errRes != nil {
+		return nil, errRes
 	}
-	if err := cursor.All(db.Ctx, &works); err != nil {
-		return nil, err
-	}
-
-	work := &works[0]
 	if time.Now().Before(work.DateStart.Time()) && (claims.UserType == models.STUDENT || claims.UserType == models.STUDENT_DIRECTIVE) {
-		return nil, fmt.Errorf("No se puede acceder a este trabajo todavía")
+		return nil, &res.ErrorRes{
+			Err:        fmt.Errorf("no se puede acceder a este trabajo todavía"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	if !work.Acumulative.IsZero() {
 		var acumulative []models.Acumulative
@@ -499,10 +306,16 @@ func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interfac
 				project,
 			})
 			if err != nil {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			if err := cursor.All(db.Ctx, &grade); err != nil {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			response["grade"] = grade[0]
 		} else {
@@ -521,10 +334,16 @@ func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interfac
 				project,
 			})
 			if err != nil {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			if err := cursor.All(db.Ctx, &grade); err != nil {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			response["grade"] = grade[0]
 		}
@@ -533,7 +352,10 @@ func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interfac
 	if work.Type == "form" {
 		form, err := formService.GetFormById(work.Form)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		response["form_has_points"] = form.HasPoints
 	}
@@ -543,21 +365,30 @@ func (w *WorkSerice) GetWork(idWork string, claims *Claims) (map[string]interfac
 			// Student access
 			idObjStudent, err := primitive.ObjectIDFromHex(claims.ID)
 			if err != nil {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			formAccess, err := w.getAccessFromIdStudentNIdWork(
 				idObjStudent,
 				idObjWork,
 			)
 			if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			response["form_access"] = formAccess
 		} else if work.Type == "files" {
 			// Get files uploaded
 			fUC, err := w.getFilesUploadedStudent(idObjUser, idObjWork)
 			if err != nil {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			if len(fUC) > 0 {
 				response["files_uploaded"] = fUC[0]
@@ -607,419 +438,6 @@ func (w *WorkSerice) getAccessFromIdStudentNIdWork(idStudent, idWork primitive.O
 		return nil, err
 	}
 	return formAccess, nil
-}
-
-func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, error) {
-	idObjWork, err := primitive.ObjectIDFromHex(idWork)
-	if err != nil {
-		return nil, err
-	}
-	idObjUser, err := primitive.ObjectIDFromHex(userId)
-	if err != nil {
-		return nil, err
-	}
-	// Get work
-	work, err := w.getWorkFromId(idObjWork)
-	if err != nil {
-		return nil, err
-	}
-
-	if work.Type != "form" {
-		return nil, fmt.Errorf("Este trabajo no es de tipo formulario")
-	}
-	if time.Now().Before(work.DateStart.Time()) {
-		return nil, fmt.Errorf("No se puede acceder a este trabajo todavía")
-	}
-	// Get form
-	form, err := formService.GetForm(work.Form.Hex(), userId, false)
-	if err != nil {
-		return nil, err
-	}
-	// Get form access
-	formAccess, err := w.getAccessFromIdStudentNIdWork(idObjUser, idObjWork)
-	if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-		return nil, err
-	}
-
-	if formAccess == nil && time.Now().Before(work.DateLimit.Time()) {
-		modelFormAccess := models.NewModelFormAccess(
-			idObjUser,
-			idObjWork,
-		)
-		inserted, err := formAccessModel.NewDocument(modelFormAccess)
-		if err != nil {
-			return nil, err
-		}
-		var diff time.Duration
-		if work.FormAccess == "default" {
-			diff = work.DateLimit.Time().Sub(time.Now())
-		} else {
-			diff = time.Duration(work.TimeFormAccess * int(time.Second))
-		}
-		err = nats.PublishEncode("close_student_form", &CloseForm{
-			Work:    idWork,
-			Student: userId,
-			Diff:    diff.Hours(),
-		})
-		if err != nil {
-			return nil, err
-		}
-		formAccess = &models.FormAccess{
-			ID:      inserted.InsertedID.(primitive.ObjectID),
-			Date:    primitive.NewDateTimeFromTime(time.Now()),
-			Student: idObjUser,
-			Work:    idObjWork,
-			Status:  "opened",
-		}
-	}
-	if formAccess == nil && time.Now().After(work.DateLimit.Time()) {
-		return nil, fmt.Errorf("No accediste al formulario, no hay respuestas a revisar")
-	}
-	var newItems []models.FormItemWLookup
-	// Answers
-	questionsLen := 0
-	for _, item := range form[0].Items {
-		for range item.Questions {
-			questionsLen += 1
-		}
-	}
-	var answers = make([]*AnswerRes, questionsLen)
-	var wg sync.WaitGroup
-
-	for j, item := range form[0].Items {
-		var questions = make([]models.ItemQuestion, len(item.Questions))
-		var err error
-
-		for i, question := range item.Questions {
-			wg.Add(1)
-
-			answerIndex := i
-			for j != 0 {
-				answerIndex += len(form[0].Items[i].Questions)
-				j -= 1
-			}
-			go func(
-				wg *sync.WaitGroup,
-				question models.ItemQuestion,
-				questions []models.ItemQuestion,
-				iQuestion,
-				iAnswer int,
-				returnErr *error,
-			) {
-				defer wg.Done()
-				var questionData models.ItemQuestion
-
-				if formAccess.Status != "revised" {
-					questionData = models.ItemQuestion{
-						ID:       question.ID,
-						Type:     question.Type,
-						Question: question.Question,
-						Points:   question.Points,
-					}
-					if question.Type != "written" {
-						questionData.Answers = question.Answers
-					}
-				} else {
-					questionData = question
-				}
-				answer, err := w.getAnswerStudent(idObjUser, idObjWork, question.ID)
-				if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-					*returnErr = err
-					return
-				}
-				// Add answer
-				if answer != nil {
-					answers[iAnswer] = &AnswerRes{
-						Answer: *answer,
-					}
-				}
-				// Add evalute
-				if work.IsRevised && question.Type == "written" {
-					var evaluate []models.EvaluatedAnswersWLookup
-
-					match := bson.D{{
-						Key: "$match",
-						Value: bson.M{
-							"question": question.ID,
-							"student":  idObjUser,
-							"work":     idObjWork,
-						},
-					}}
-					lookup := bson.D{{
-						Key: "$lookup",
-						Value: bson.M{
-							"from":         models.USERS_COLLECTION,
-							"localField":   "evaluator",
-							"foreignField": "_id",
-							"as":           "evaluator",
-							"pipeline": bson.A{bson.D{{
-								Key: "$project",
-								Value: bson.M{
-									"name":           1,
-									"first_lastname": 1,
-								},
-							}}},
-						},
-					}}
-					project := bson.D{{
-						Key: "$project",
-						Value: bson.M{
-							"evaluator": bson.M{
-								"$arrayElemAt": bson.A{"$evaluator", 0},
-							},
-							"points": 1,
-							"date":   1,
-						},
-					}}
-					cursor, err := evaluatedAnswersModel.Aggreagate(mongo.Pipeline{
-						match,
-						lookup,
-						project,
-					})
-					if err != nil {
-						*returnErr = err
-						return
-					}
-					if err := cursor.All(db.Ctx, &evaluate); err != nil {
-						*returnErr = err
-						return
-					}
-					answers[iAnswer].Evaluate = evaluate[0]
-				}
-				// Add question
-				questions[iQuestion] = questionData
-			}(&wg, question, questions, i, answerIndex, &err)
-		}
-		wg.Wait()
-		if err != nil {
-			return nil, err
-		}
-		newItems = append(newItems, models.FormItemWLookup{
-			Title:      item.Title,
-			PointsType: item.PointsType,
-			Questions:  questions,
-		})
-	}
-
-	form[0].Items = newItems
-	// Calculate rest time
-	var dateLimit time.Time
-	if work.FormAccess == "wtime" {
-		datePlusTime := formAccess.Date.Time().Add(time.Duration(work.TimeFormAccess * int(time.Second)))
-		if datePlusTime.Before(work.DateLimit.Time()) {
-			dateLimit = datePlusTime
-		} else {
-			dateLimit = work.DateLimit.Time()
-		}
-	}
-	// Return response
-	response := make(map[string]interface{})
-	workResponse := make(map[string]interface{})
-	workResponse["wtime"] = work.FormAccess == "wtime"
-	workResponse["date_limit"] = dateLimit
-	// Status
-	isClosedWTime := work.FormAccess == "wtime" && time.Now().After(dateLimit)
-	isClosed := time.Now().After(work.DateLimit.Time()) || formAccess.Status == "finished" || isClosedWTime
-	if formAccess.Status == "revised" {
-		workResponse["status"] = "revised"
-	} else if isClosed {
-		workResponse["status"] = "finished"
-	} else {
-		workResponse["status"] = "opened"
-	}
-	// Get points
-	if work.IsRevised {
-		var questionsWPoints []models.ItemQuestion
-		maxPoints := 0
-		for _, item := range form[0].Items {
-			for _, question := range item.Questions {
-				if question.Type != "alternatives" {
-					maxPoints += question.Points
-					questionsWPoints = append(questionsWPoints, question)
-				}
-			}
-		}
-
-		totalPoints, _, err := w.getStudentEvaluate(
-			questionsWPoints,
-			idObjUser,
-			idObjWork,
-		)
-		// Points response
-		pointsRes := make(map[string]interface{})
-		pointsRes["max_points"] = maxPoints
-		pointsRes["total_points"] = totalPoints
-
-		response["points"] = pointsRes
-		if err != nil {
-			return nil, err
-		}
-	}
-	// Response
-	response["form"] = &form[0]
-	response["answers"] = answers
-	response["work"] = workResponse
-	return response, nil
-}
-
-func (w *WorkSerice) GetFormStudent(
-	idWork,
-	idStudent string,
-) (*models.FormWLookup, []AnswerRes, error) {
-	idObjWork, err := primitive.ObjectIDFromHex(idWork)
-	if err != nil {
-		return nil, nil, err
-	}
-	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
-	if err != nil {
-		return nil, nil, err
-	}
-	// Get work
-	work, err := w.getWorkFromId(idObjWork)
-	if err != nil {
-		return nil, nil, err
-	}
-	if work.Type != "form" {
-		return nil, nil, fmt.Errorf("El trabajo no es un formulario")
-	}
-	if time.Now().Before(work.DateLimit.Time()) {
-		return nil, nil, fmt.Errorf("Este formulario todavía no se puede evaluar")
-	}
-	// Get form
-	form, err := formService.GetForm(work.Form.Hex(), primitive.NilObjectID.Hex(), false)
-	// Get access student
-	formAccess, err := w.getAccessFromIdStudentNIdWork(idObjStudent, idObjWork)
-	if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-		return nil, nil, err
-	}
-	if formAccess == nil {
-		return nil, nil, fmt.Errorf("Este alumno no ha tiene respuestas, ya que no abrió el formulario")
-	}
-	// Get answers
-	questionsLen := 0
-	for _, item := range form[0].Items {
-		for range item.Questions {
-			questionsLen += 1
-		}
-	}
-	var answers = make([]AnswerRes, questionsLen)
-	var wg sync.WaitGroup
-
-	for i, item := range form[0].Items {
-		for j, question := range item.Questions {
-			wg.Add(1)
-
-			iAnswer := j
-			for i != 0 {
-				iAnswer += len(form[0].Items[i].Questions)
-				i -= 1
-			}
-			go func(question models.ItemQuestion, iAnswer int, wg *sync.WaitGroup, errRet *error) {
-				defer wg.Done()
-
-				answer, err := w.getAnswerStudent(idObjStudent, idObjWork, question.ID)
-				if err != nil {
-					if err.Error() != db.NO_SINGLE_DOCUMENT {
-						*errRet = err
-					}
-					return
-				}
-				// Get evaluate
-				var evaluatedAnswer *models.EvaluatedAnswers
-				if question.Type == "written" {
-					cursor := evaluatedAnswersModel.GetOne(bson.D{
-						{
-							Key:   "question",
-							Value: question.ID,
-						},
-						{
-							Key:   "student",
-							Value: idObjStudent,
-						},
-						{
-							Key:   "work",
-							Value: idObjWork,
-						},
-					})
-					if err := cursor.Decode(&evaluatedAnswer); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-						*errRet = err
-						return
-					}
-				}
-				answers[iAnswer] = AnswerRes{
-					Answer:   *answer,
-					Evaluate: evaluatedAnswer,
-				}
-			}(question, iAnswer, &wg, &err)
-		}
-	}
-	wg.Wait()
-	if err != nil {
-		return nil, nil, err
-	}
-	// Get
-	return &form[0], answers, nil
-}
-
-func (w *WorkSerice) getQuestionsFromIdForm(idForm primitive.ObjectID) ([]models.ItemQuestion, error) {
-	// Get questions
-	type QuestionsRes struct {
-		ID        string                `bson:"_id"`
-		Questions []models.ItemQuestion `bson:"questions"`
-	}
-	var questions []QuestionsRes
-	match := bson.D{{
-		Key: "$match",
-		Value: bson.M{
-			"_id": idForm,
-		},
-	}}
-	unwindItems := bson.D{{
-		Key: "$unwind",
-		Value: bson.M{
-			"path": "$items",
-		},
-	}}
-	groupQuestionsArray := bson.D{{
-		Key: "$group",
-		Value: bson.M{
-			"_id": "_id",
-			"questions": bson.M{
-				"$push": "$items.questions",
-			},
-		},
-	}}
-	unwindQuestions := bson.D{{
-		Key: "$unwind",
-		Value: bson.M{
-			"path": "$questions",
-		},
-	}}
-	groupQuestions := bson.D{{
-		Key: "$group",
-		Value: bson.M{
-			"_id": "",
-			"questions": bson.M{
-				"$addToSet": "$questions",
-			},
-		},
-	}}
-	cursorQuestions, err := formModel.Aggreagate(mongo.Pipeline{
-		match,
-		unwindItems,
-		formService.getLookupQuestions(),
-		groupQuestionsArray,
-		unwindQuestions,
-		unwindQuestions,
-		groupQuestions,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := cursorQuestions.All(db.Ctx, &questions); err != nil {
-		return nil, err
-	}
-	return questions[0].Questions, nil
 }
 
 func (w *WorkSerice) getStudentEvaluate(
@@ -1149,23 +567,35 @@ func (w *WorkSerice) getFilesUploadedStudent(
 	return fUC, nil
 }
 
-func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) (interface{}, int, error) {
+func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int, *res.ErrorRes) {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get students
 	students, err := w.getStudentsFromIdModule(idModule)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if len(students) == 0 {
-		return nil, -1, fmt.Errorf("Ningún estudiante pertenece a este trabajo")
+		return nil, -1, &res.ErrorRes{
+			Err:        fmt.Errorf("ningún estudiante pertenece a este trabajo"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get access of students
 	var wg sync.WaitGroup
@@ -1173,7 +603,10 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) (interface{}, in
 	if work.Type == "form" {
 		questions, err := w.getQuestionsFromIdForm(work.Form)
 		if err != nil {
-			return nil, -1, err
+			return nil, -1, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		for _, question := range questions {
 			if question.Type != "alternatives" {
@@ -1233,7 +666,10 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) (interface{}, in
 	}
 	wg.Wait()
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Total points
 	var totalPoints int
@@ -1249,22 +685,34 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) (interface{}, in
 	return students, totalPoints, nil
 }
 
-func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter io.Writer) (*zip.Writer, error) {
+func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter io.Writer) (*zip.Writer, *res.ErrorRes) {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get files
 	fUC, err := w.getFilesUploadedStudent(idObjStudent, idObjWork)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if len(fUC) == 0 {
-		return nil, fmt.Errorf("No se pueden descargar archivos si no hay archivos subidos")
+		return nil, &res.ErrorRes{
+			Err:        fmt.Errorf("no se pueden descargar archivos si no hay archivos subidos"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Download files AWS
 	type File struct {
@@ -1291,22 +739,34 @@ func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter 
 	}
 	wg.Wait()
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Create zip archive
 	zipWritter := zip.NewWriter(writter)
 	for _, file := range files {
 		zipFile, err := zipWritter.Create(file.name)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusInternalServerError,
+			}
 		}
 		body, err := ioutil.ReadAll(file.file)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusInternalServerError,
+			}
 		}
 		_, err = zipFile.Write(body)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusInternalServerError,
+			}
 		}
 	}
 	return zipWritter, nil
@@ -1334,7 +794,7 @@ func (w *WorkSerice) verifyGradeWork(idObjModule, idObjGrade primitive.ObjectID)
 				},
 			}})
 			if err := cursor.Decode(&grade); err != nil {
-				return nil, fmt.Errorf("No existe la calificación indicada")
+				return nil, fmt.Errorf("no existe la calificación indicada")
 			}
 			gradeRet.Acumulative = idObjGrade
 			gradeRet.Grade = grade.ID
@@ -1378,7 +838,7 @@ func (w *WorkSerice) verifyGradeWork(idObjModule, idObjGrade primitive.ObjectID)
 		return nil, err
 	}
 	if work != nil {
-		return nil, fmt.Errorf("Esta calificación está registrada ya a un trabajo")
+		return nil, fmt.Errorf("esta calificación está registrada ya a un trabajo")
 	}
 	return &gradeRet, nil
 }
@@ -1387,46 +847,73 @@ func (w *WorkSerice) UploadWork(
 	work *forms.WorkForm,
 	idModule string,
 	claims *Claims,
-) error {
+) *res.ErrorRes {
 	idObjUser, err := primitive.ObjectIDFromHex(claims.ID)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Date
 	tStart, err := time.Parse("2006-01-02 15:04", work.DateStart)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	tLimit, err := time.Parse("2006-01-02 15:04", work.DateLimit)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if tStart.After(tLimit) {
-		return fmt.Errorf("La fecha y hora de inicio es mayor a la limite")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("la fecha y hora de inicio es mayor a la limite"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get module
 	module, err := moduleService.GetModuleFromID(idModule)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Grade
 	if *work.IsQualified {
 		idObjGrade, err := primitive.ObjectIDFromHex(work.Grade)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		idObjModule, err := primitive.ObjectIDFromHex(idModule)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		// Grade
 		grade, err := w.verifyGradeWork(idObjModule, idObjGrade)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		if grade.IsAcumulative {
 			work.Acumulative = idObjGrade
@@ -1437,31 +924,52 @@ func (w *WorkSerice) UploadWork(
 	if work.Type == "form" {
 		idObjForm, err := primitive.ObjectIDFromHex(work.Form)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		var form *models.Form
 		cursor := formModel.GetByID(idObjForm)
 		if err := cursor.Decode(&form); err != nil {
-			return fmt.Errorf("No existe el formulario indicado")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("no existe el formulario indicado"),
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		if !form.Status {
-			return fmt.Errorf("Este formulario está eliminado")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("este formulario está eliminado"),
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		if form.Author != idObjUser {
-			return fmt.Errorf("No tienes acceso a este formulario")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("no tienes acceso a este formulario"),
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		if *work.IsQualified && !form.HasPoints {
-			return fmt.Errorf("Este formulario no tiene puntaje. Escoga uno con puntaje")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("este formulario no tiene puntaje. Escoga uno con puntaje"),
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 	}
 	// Insert
 	modelWork, err := models.NewModelWork(work, tStart, tLimit, idObjModule, idObjUser)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	insertedWork, err := workModel.NewDocument(modelWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Insert Elasticsearch
 	indexerWork := &models.WorkES{
@@ -1475,13 +983,19 @@ func (w *WorkSerice) UploadWork(
 	}
 	data, err := json.Marshal(indexerWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
 	// Add item to the BulkIndexer
 	oid, _ := insertedWork.InsertedID.(primitive.ObjectID)
 	bi, err := models.NewBulkWork()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	err = bi.Add(
 		context.Background(),
@@ -1492,10 +1006,16 @@ func (w *WorkSerice) UploadWork(
 		},
 	)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := bi.Close(context.Background()); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Notification
 	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
@@ -1542,7 +1062,7 @@ func (w *WorkSerice) saveAnswer(
 		return err
 	}
 	if formCursor == nil {
-		return fmt.Errorf("La pregunta no pertenece al trabajo indicado")
+		return fmt.Errorf("la pregunta no pertenece al trabajo indicado")
 	}
 	// Get question
 	var question *models.ItemQuestion
@@ -1554,7 +1074,7 @@ func (w *WorkSerice) saveAnswer(
 
 	if question.Type != "written" && answer.Answer != nil {
 		if lenAnswers <= *answer.Answer || lenAnswers < 0 {
-			return fmt.Errorf("Indique una respuesta válida")
+			return fmt.Errorf("indique una respuesta válida")
 		}
 	}
 	// Get answer
@@ -1625,29 +1145,47 @@ func (w *WorkSerice) saveAnswer(
 	return nil
 }
 
-func (w *WorkSerice) SaveAnswer(answer *forms.AnswerForm, idWork, idQuestion, idStudent string) error {
+func (w *WorkSerice) SaveAnswer(answer *forms.AnswerForm, idWork, idQuestion, idStudent string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjQuestion, err := primitive.ObjectIDFromHex(idQuestion)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if work.Type != "form" {
-		return fmt.Errorf("El trabajo no es de tipo formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("el trabajo no es de tipo formulario"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if time.Now().After(work.DateLimit.Time()) {
-		return fmt.Errorf("Ya no se puede acceder al formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("ya no se puede acceder al formulario"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Get access
 	formAcess, err := w.getAccessFromIdStudentNIdWork(
@@ -1655,42 +1193,69 @@ func (w *WorkSerice) SaveAnswer(answer *forms.AnswerForm, idWork, idQuestion, id
 		idObjWork,
 	)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if formAcess.Status != "opened" {
-		return fmt.Errorf("Ya no puedes acceder al formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("ya no puedes acceder al formulario"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	limitDate := formAcess.Date.Time().Add(time.Duration(work.TimeFormAccess * int(time.Second)))
 	if work.FormAccess == "wtime" && time.Now().After(limitDate) {
-		return fmt.Errorf("Ya no puedes acceder al formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("ya no puedes acceder al formulario"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	w.saveAnswer(answer, idObjWork, idObjQuestion, idObjStudent)
 	return nil
 }
 
-func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser string) error {
+func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if len(files) > 3 {
-		return fmt.Errorf("Solo se puede subir hasta 3 archivos por trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Solo se puede subir hasta 3 archivos por trabajo"),
+			StatusCode: http.StatusRequestEntityTooLarge,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	now := time.Now()
 	if now.Before(work.DateStart.Time()) {
-		return fmt.Errorf("Todavía no se puede acceder a este trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Todavía no se puede acceder a este trabajo"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	if now.After(work.DateLimit.Time().Add(7*24*time.Hour)) || work.IsRevised {
-		return fmt.Errorf("Ya no se pueden subir archivos a este trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Ya no se pueden subir archivos a este trabajo"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Get files uploaded
 	var fUC *models.FileUploadedClassroom
@@ -1705,10 +1270,16 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 		},
 	})
 	if err := cursor.Decode(&fUC); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if fUC != nil && len(fUC.FilesUploaded)+len(files) > 3 {
-		return fmt.Errorf("Solo se puede subir hasta 3 archivos por trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Solo se puede subir hasta 3 archivos por trabajo"),
+			StatusCode: http.StatusRequestEntityTooLarge,
+		}
 	}
 	// UploadFiles
 	filesIds := make([]primitive.ObjectID, len(files))
@@ -1769,7 +1340,10 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 	}
 	wg.Wait()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if fUC == nil {
 		modelFileUC := models.NewModelFileUC(
@@ -1779,7 +1353,10 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 		)
 		_, err = fileUCModel.NewDocument(modelFileUC)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	} else {
 		_, err = fileUCModel.Use().UpdateByID(db.Ctx, fUC.ID, bson.D{{
@@ -1791,36 +1368,54 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 			},
 		}})
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	return nil
 }
 
-func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent string) error {
+func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	now := time.Now()
 	if work.DateLimit.Time().Add(time.Minute * 5).Before(now) {
-		return fmt.Errorf("Ya no se pueden modificar las respuestas de este formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("ya no se pueden modificar las respuestas de este formulario"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Save answers
 	var wg sync.WaitGroup
 	for _, answer := range answers.Answers {
 		idObjQuestion, err := primitive.ObjectIDFromHex(answer.Question)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		if answer.Answer != nil && answer.Response != "" {
 			wg.Add(1)
@@ -1846,7 +1441,10 @@ func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent st
 	}
 	wg.Wait()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Update student access status
 	_, err = formAccessModel.Use().UpdateOne(
@@ -1869,7 +1467,10 @@ func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent st
 		}},
 	)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return nil
 }
@@ -2003,61 +1604,100 @@ func (w *WorkSerice) UploadPointsStudent(
 	idWork,
 	idQuestion,
 	idStudent string,
-) error {
+) *res.ErrorRes {
 	idObjEvaluator, err := primitive.ObjectIDFromHex(idEvaluator)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjQuestion, err := primitive.ObjectIDFromHex(idQuestion)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if time.Now().Before(work.DateLimit.Time()) {
-		return fmt.Errorf("Todavía no se pueden evaluar preguntas en este formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Todavía no se pueden evaluar preguntas en este formulario"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Get module
 	module, err := moduleService.GetModuleFromID(work.Module.Hex())
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get grade program
 	var gradeProgram models.GradesProgram
 	cursor := gradeProgramModel.GetByID(work.Grade)
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
-			return fmt.Errorf("No existe la programación de calificación")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("No existe la programación de calificación"),
+				StatusCode: http.StatusNotFound,
+			}
 		}
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get form
 	form, err := formService.GetFormById(work.Form)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if !form.HasPoints {
-		return fmt.Errorf("No se puede evaluar un formulario sin puntos")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No se puede evaluar un formulario sin puntos"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get question
 	var question *models.ItemQuestion
 	cursor = formQuestionModel.GetByID(idObjQuestion)
 	if err := cursor.Decode(&question); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if points < 0 || points > question.Points {
-		return fmt.Errorf("Puntaje fuera de rango. Debe ser entre cero y máx %v", question.Points)
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Puntaje fuera de rango. Debe ser entre cero y máx %v", question.Points),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Form Access
 	_, err = w.getAccessFromIdStudentNIdWork(
@@ -2065,7 +1705,10 @@ func (w *WorkSerice) UploadPointsStudent(
 		idObjWork,
 	)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Get evaluate
 	var evaluatedAnswer *models.EvaluatedAnswers
@@ -2084,7 +1727,10 @@ func (w *WorkSerice) UploadPointsStudent(
 		},
 	})
 	if err := cursor.Decode(&evaluatedAnswer); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Upload points
 	if evaluatedAnswer != nil {
@@ -2096,7 +1742,10 @@ func (w *WorkSerice) UploadPointsStudent(
 			},
 		}})
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	} else {
 		modelEvaluatedAnswer := models.NewModelEvaluatedAnswers(
@@ -2108,14 +1757,20 @@ func (w *WorkSerice) UploadPointsStudent(
 		)
 		_, err = evaluatedAnswersModel.NewDocument(modelEvaluatedAnswer)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	// Grade
 	if work.IsRevised {
 		err = w.updateGrade(work, idObjStudent, idObjEvaluator, 0)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		// Send notifications
 		nats.PublishEncode("notify/classroom", res.NotifyClassroom{
@@ -2139,47 +1794,77 @@ func (w *WorkSerice) UploadEvaluateFiles(
 	idEvaluator,
 	idStudent string,
 	reavaluate bool,
-) error {
+) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjStudent, err := primitive.ObjectIDFromHex(idStudent)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjEvaluator, err := primitive.ObjectIDFromHex(idEvaluator)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if work.Type != "files" {
-		return fmt.Errorf("Este trabajo no es de tipo archivos")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este trabajo no es de tipo archivos"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	now := time.Now()
 	if now.Before(work.DateLimit.Time()) {
-		return fmt.Errorf("Todavía no se puede evaluar el trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Todavía no se puede evaluar el trabajo"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	if !reavaluate && work.IsRevised {
-		return fmt.Errorf("Ya no se puede actualizar el puntaje del alumno")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("ya no se puede actualizar el puntaje del alumno"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Get module
 	module, err := moduleService.GetModuleFromID(work.Module.Hex())
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get grade program
 	var gradeProgram models.GradesProgram
 	cursor := gradeProgramModel.GetByID(work.Grade)
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
-			return fmt.Errorf("No existe la programación de calificación")
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("No existe la programación de calificación"),
+				StatusCode: http.StatusNotFound,
+			}
 		}
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get evaluate student
 	var fUC *models.FileUploadedClassroom
@@ -2194,27 +1879,39 @@ func (w *WorkSerice) UploadEvaluateFiles(
 		},
 	})
 	if err := cursor.Decode(&fUC); err != nil {
-		return fmt.Errorf("No se encontraron archivos subidos por parte del alumno")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No se encontraron archivos subidos por parte del alumno"),
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Build model
 	var evaluateFiles []interface{}
 	for _, ev := range evalute {
 		idObjPattern, err := primitive.ObjectIDFromHex(ev.Pattern)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		exists := false
 		for _, item := range work.Pattern {
 			if item.ID == idObjPattern {
 				if item.Points < *ev.Points {
-					return fmt.Errorf("Los puntos evaluados superan el máx. del item")
+					return &res.ErrorRes{
+						Err:        fmt.Errorf("Los puntos evaluados superan el máx. del item"),
+						StatusCode: http.StatusBadRequest,
+					}
 				}
 				exists = true
 				break
 			}
 		}
 		if !exists {
-			return fmt.Errorf("No existe el item #%s en este trabajo", ev.Pattern)
+			return &res.ErrorRes{
+				Err:        fmt.Errorf("No existe el item #%s en este trabajo", ev.Pattern),
+				StatusCode: http.StatusNotFound,
+			}
 		}
 		// Get evaluate files
 		var idEvaluate primitive.ObjectID
@@ -2258,7 +1955,10 @@ func (w *WorkSerice) UploadEvaluateFiles(
 				}},
 			)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 		}
 	}
@@ -2272,7 +1972,10 @@ func (w *WorkSerice) UploadEvaluateFiles(
 			},
 		}})
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	} else if reavaluate {
 		points := 0
@@ -2281,7 +1984,10 @@ func (w *WorkSerice) UploadEvaluateFiles(
 		}
 		err = w.updateGrade(work, idObjStudent, idObjEvaluator, points)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	// Send notifications
@@ -2392,45 +2098,75 @@ func (w *WorkSerice) gradeEvaluatedWork(
 	return nil
 }
 
-func (w *WorkSerice) GradeForm(idWork, idUser string) error {
+func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if work.Type != "form" {
-		return fmt.Errorf("El trabajo no es de tipo formulario")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("El trabajo no es de tipo formulario"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if time.Now().Before(work.DateLimit.Time()) {
-		return fmt.Errorf("Este formulario todavía no se puede calificar")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este formulario todavía no se puede calificar"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	if work.IsRevised {
-		return fmt.Errorf("Este trabajo ya está evaluado")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este trabajo ya está evaluado"),
+			StatusCode: http.StatusForbidden,
+		}
 	}
 	// Get form
 	var form *models.Form
 	cursor := formModel.GetByID(work.Form)
 	if err := cursor.Decode(&form); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if !form.HasPoints {
-		return fmt.Errorf("Este formulario no puede ser calificado, el formulario no tiene puntos")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este formulario no puede ser calificado, el formulario no tiene puntos"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get student
 	students, err := w.getStudentsFromIdModule(work.Module.Hex())
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if len(students) == 0 {
-		return fmt.Errorf("No existen alumnos a evaluar en este trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No existen alumnos a evaluar en este trabajo"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get grade program
 	var program *models.GradesProgram
@@ -2444,7 +2180,10 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 	var questionsWPoints []models.ItemQuestion
 	questions, err := w.getQuestionsFromIdForm(work.Form)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	for _, question := range questions {
 		if question.Type != "alternatives" {
@@ -2545,12 +2284,18 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 	}
 	wg.Wait()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get min max grade
 	minGrade, maxGrade, err := GetMinNMaxGrade()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Transform grades
 	var studentsGrade []StudentGrades
@@ -2584,7 +2329,10 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 		}
 		_, err = formAccessModel.Use().InsertMany(db.Ctx, insertStudents)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	_, err = formAccessModel.Use().UpdateMany(
@@ -2601,7 +2349,10 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 		}},
 	)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Update work status
 	_, err = workModel.Use().UpdateByID(db.Ctx, idObjWork, bson.D{{
@@ -2611,7 +2362,10 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 		},
 	}})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Insert and update grades
 	if work.IsQualified {
@@ -2622,7 +2376,10 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 			program,
 		)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	} else {
 		// Generate models
@@ -2639,13 +2396,19 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 		}
 		_, err := workGradeModel.Use().InsertMany(db.Ctx, modelsGrades)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	// Send notifications
 	module, err := moduleService.GetModuleFromID(work.Module.Hex())
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	nats.PublishEncode("notify/classroom", res.NotifyClassroom{
 		Title: fmt.Sprintf("Trabajo evaluado %v", work.Title),
@@ -2661,33 +2424,54 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) error {
 	return nil
 }
 
-func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
+func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if work.Type != "files" {
-		return fmt.Errorf("El trabajo no es de tipo archivos")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("El trabajo no es de tipo archivos"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if time.Now().Before(work.DateLimit.Time()) {
-		return fmt.Errorf("Este trabajo todavía no se puede calificar")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este trabajo todavía no se puede calificar"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	if work.IsRevised {
-		return fmt.Errorf("Este trabajo ya está evaluado")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este trabajo ya está evaluado"),
+			StatusCode: http.StatusForbidden,
+		}
 	}
 	// Get module
 	module, err := moduleService.GetModuleFromID(work.Module.Hex())
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get grade program
 	var program *models.GradesProgram
@@ -2698,10 +2482,16 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 	// Get student
 	students, err := w.getStudentsFromIdModule(work.Module.Hex())
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if len(students) == 0 {
-		return fmt.Errorf("No existen alumnos a evaluar en este trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No existen alumnos a evaluar en este trabajo"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get points student
 	type StudentPoints struct {
@@ -2797,12 +2587,18 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 	}
 	wg.Wait()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get min max grade
 	minGrade, maxGrade, err := GetMinNMaxGrade()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Transform grades
 	var studentsGrade []StudentGrades
@@ -2831,7 +2627,10 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 		},
 	}})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Insert grades
 	if work.IsQualified {
@@ -2842,7 +2641,10 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 			program,
 		)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	} else {
 		// Generate models
@@ -2859,7 +2661,10 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 		}
 		_, err := workGradeModel.Use().InsertMany(db.Ctx, modelsGrades)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	// Send notifications
@@ -2877,22 +2682,34 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) error {
 	return nil
 }
 
-func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser string) error {
+func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	workData, err := w.getWorkFromId(idObjWork)
+	workData, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if workData.IsRevised {
-		return fmt.Errorf("Ya no se puede editar este trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Ya no se puede editar este trabajo"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Update work
 	update := bson.M{}
@@ -2909,13 +2726,19 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 	if workData.IsQualified && work.Grade != "" {
 		idObjGrade, err := primitive.ObjectIDFromHex(work.Grade)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		if workData.Grade != idObjGrade && workData.Acumulative != idObjGrade {
 			// Grade
 			grade, err := w.verifyGradeWork(workData.Module, idObjGrade)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			if grade.IsAcumulative {
 				update["grade"] = grade.Grade
@@ -2935,7 +2758,10 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 			if item.ID != "" {
 				idObjItem, err := primitive.ObjectIDFromHex(item.ID)
 				if err != nil {
-					return err
+					return &res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusBadRequest,
+					}
 				}
 				var find bool
 				for _, itemData := range workData.Pattern {
@@ -2945,7 +2771,10 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 					}
 				}
 				if !find {
-					return fmt.Errorf("No se puede actualizar un item que no está registrado")
+					return &res.ErrorRes{
+						Err:        fmt.Errorf("No se puede actualizar un item que no está registrado"),
+						StatusCode: http.StatusNotFound,
+					}
 				}
 				itemAdd.ID = idObjItem
 			}
@@ -2959,20 +2788,35 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 		if work.Form != "" {
 			idObjForm, err := primitive.ObjectIDFromHex(work.Form)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusBadRequest,
+				}
 			}
 			form, err := formService.GetFormById(idObjForm)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			if !form.Status {
-				return fmt.Errorf("Este formulario está eliminado")
+				return &res.ErrorRes{
+					Err:        fmt.Errorf("Este formulario está eliminado"),
+					StatusCode: http.StatusBadRequest,
+				}
 			}
 			if form.Author != idObjUser {
-				return fmt.Errorf("Este formulario no te pertenece")
+				return &res.ErrorRes{
+					Err:        fmt.Errorf("Este formulario no te pertenece"),
+					StatusCode: http.StatusUnauthorized,
+				}
 			}
 			if !form.HasPoints && workData.IsQualified {
-				return fmt.Errorf("Un trabajo evaluado no puede tener un formulario sin puntaje")
+				return &res.ErrorRes{
+					Err:        fmt.Errorf("Un trabajo evaluado no puede tener un formulario sin puntaje"),
+					StatusCode: http.StatusBadRequest,
+				}
 			}
 			update["form"] = idObjForm
 		}
@@ -2996,7 +2840,10 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 		} else {
 			idObjFile, err := primitive.ObjectIDFromHex(att.File)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusBadRequest,
+				}
 			}
 			attachedModel.File = idObjFile
 		}
@@ -3009,7 +2856,10 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 	if now.Before(workData.DateStart.Time()) && work.DateStart != "" {
 		tStart, err := time.Parse("2006-01-02 15:04", work.DateStart)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		toDateTime := primitive.NewDateTimeFromTime(tStart)
 		update["date_start"] = toDateTime
@@ -3018,31 +2868,49 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 	if work.DateLimit != "" {
 		tLimit, err := time.Parse("2006-01-02 15:04", work.DateLimit)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		toDateTime := primitive.NewDateTimeFromTime(tLimit)
 		update["date_limit"] = toDateTime
 		updateEs["date_limit"] = toDateTime
 	}
 	if !tStart.IsZero() && !tLimit.IsZero() && tStart.After(tLimit) {
-		return fmt.Errorf("La fecha y hora de inicio es mayor a la limite")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("La fecha y hora de inicio es mayor a la limite"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if !tStart.IsZero() && tLimit.IsZero() && tStart.After(workData.DateLimit.Time()) {
-		return fmt.Errorf("La fecha y hora de inicio es mayor a la limite registrada")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("La fecha y hora de inicio es mayor a la limite registrada"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if !tLimit.IsZero() && tStart.IsZero() && workData.DateStart.Time().After(tLimit) {
-		return fmt.Errorf("La fecha y hora de inicio registrada es mayor a la limite")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("La fecha y hora de inicio registrada es mayor a la limite"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	update["date_update"] = primitive.NewDateTimeFromTime(now)
 	// Update work
 	// Update ES
 	data, err := json.Marshal(updateEs)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
 	bi, err := models.NewBulkWork()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	err = bi.Add(
 		context.Background(),
@@ -3053,10 +2921,16 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 		},
 	)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := bi.Close(context.Background()); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Update DB
 	_, err = workModel.Use().UpdateByID(db.Ctx, idObjWork, bson.D{
@@ -3070,23 +2944,35 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 		},
 	})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return nil
 }
 
-func (w *WorkSerice) DeleteWork(idWork string) error {
+func (w *WorkSerice) DeleteWork(idWork string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if work.IsRevised {
-		return fmt.Errorf("No se puede eliminar un trabajo calificado")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No se puede eliminar un trabajo calificado"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Delete references
 	filter := bson.D{{
@@ -3097,10 +2983,16 @@ func (w *WorkSerice) DeleteWork(idWork string) error {
 		var fUCs []models.FileUploadedClassroom
 		cursor, err := fileUCModel.GetAll(filter, &options.FindOptions{})
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		if err := cursor.All(db.Ctx, &fUCs); err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		// Files to delete
 		var files []string
@@ -3112,31 +3004,49 @@ func (w *WorkSerice) DeleteWork(idWork string) error {
 		if len(files) > 0 {
 			err = nats.PublishEncode("delete_files", files)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 		}
 		_, err = fileUCModel.Use().DeleteMany(db.Ctx, filter)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	} else if work.Type == "form" {
 		_, err = answerModel.Use().DeleteMany(db.Ctx, filter)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		_, err = evaluatedAnswersModel.Use().DeleteMany(db.Ctx, filter)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		_, err = formAccessModel.Use().DeleteMany(db.Ctx, filter)
 		if err != nil {
-			return err
+			return &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	// Delete work ElasticSearch
 	bi, err := models.NewBulkWork()
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	err = bi.Add(
 		context.Background(),
@@ -3146,10 +3056,16 @@ func (w *WorkSerice) DeleteWork(idWork string) error {
 		},
 	)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := bi.Close(context.Background()); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Delete work
 	_, err = workModel.Use().DeleteOne(db.Ctx, bson.D{{
@@ -3157,26 +3073,37 @@ func (w *WorkSerice) DeleteWork(idWork string) error {
 		Value: idObjWork,
 	}})
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Delete notifications
 	nats.Publish("delete_notification", []byte(idWork))
 	return nil
 }
 
-func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) error {
+func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjFile, err := primitive.ObjectIDFromHex(idFile)
 	if err != nil {
-		fmt.Printf("idFile: %v\n", idFile)
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjUser, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get files uploaded
 	var fUC *models.FileUploadedClassroom
@@ -3191,7 +3118,10 @@ func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) error {
 		},
 	})
 	if err := cursor.Decode(&fUC); err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	updated := false
 	for _, file := range fUC.FilesUploaded {
@@ -3199,13 +3129,19 @@ func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) error {
 			// Delete file AWS
 			msg, err := nats.Request("get_key_from_id_file", []byte(idFile))
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 
 			keyFile := string(msg.Data[:])
 			err = aws.DeleteFile(keyFile)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			// Delete file classroom
 			if len(fUC.FilesUploaded) == 1 {
@@ -3214,7 +3150,10 @@ func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) error {
 					Value: fUC.ID,
 				}})
 				if err != nil {
-					return err
+					return &res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusServiceUnavailable,
+					}
 				}
 			} else {
 				_, err = fileUCModel.Use().UpdateByID(db.Ctx, fUC.ID, bson.D{{
@@ -3224,7 +3163,10 @@ func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) error {
 					},
 				}})
 				if err != nil {
-					return err
+					return &res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusServiceUnavailable,
+					}
 				}
 			}
 			updated = true
@@ -3232,27 +3174,42 @@ func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) error {
 		}
 	}
 	if !updated {
-		return fmt.Errorf("No se encontró el archivo a eliminar en este trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("No se encontró el archivo a eliminar en este trabajo"),
+			StatusCode: http.StatusNotFound,
+		}
 	}
 	return nil
 }
 
-func (w *WorkSerice) DeleteAttached(idWork, idAttached string) error {
+func (w *WorkSerice) DeleteAttached(idWork, idAttached string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjAttached, err := primitive.ObjectIDFromHex(idAttached)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if work.IsRevised {
-		return fmt.Errorf("Ya no se puede editar este trabajo")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Ya no se puede editar este trabajo"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Delete attached
 	for _, attached := range work.Attached {
@@ -3270,33 +3227,54 @@ func (w *WorkSerice) DeleteAttached(idWork, idAttached string) error {
 				}},
 			)
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			return nil
 		}
 	}
-	return fmt.Errorf("No existe este elemento adjunto al trabajo")
+	return &res.ErrorRes{
+		Err:        fmt.Errorf("No existe este elemento adjunto al trabajo"),
+		StatusCode: http.StatusNotFound,
+	}
 }
 
-func (w *WorkSerice) DeleteItemPattern(idWork, idItem string) error {
+func (w *WorkSerice) DeleteItemPattern(idWork, idItem string) *res.ErrorRes {
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idObjItem, err := primitive.ObjectIDFromHex(idItem)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get work
-	work, err := w.getWorkFromId(idObjWork)
+	work, err := workRepository.GetWorkFromId(idObjWork)
 	if err != nil {
-		return err
+		return &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if work.Type != "files" {
-		return fmt.Errorf("Este no es un trabajo de archivos")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este no es un trabajo de archivos"),
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	if work.IsRevised {
-		return fmt.Errorf("Este trabajo ya no se puede editar")
+		return &res.ErrorRes{
+			Err:        fmt.Errorf("Este trabajo ya no se puede editar"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	// Delete item
 	for _, item := range work.Pattern {
@@ -3310,12 +3288,18 @@ func (w *WorkSerice) DeleteItemPattern(idWork, idItem string) error {
 				},
 			}})
 			if err != nil {
-				return err
+				return &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			return nil
 		}
 	}
-	return fmt.Errorf("No existe el item a eliminar")
+	return &res.ErrorRes{
+		Err:        fmt.Errorf("No existe el item a eliminar"),
+		StatusCode: http.StatusNotFound,
+	}
 }
 
 func NewWorksService() *WorkSerice {

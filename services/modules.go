@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/res"
 	natsPackage "github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -223,11 +225,11 @@ func (module *ModulesService) GetCourses() {
 		if err != nil {
 			return
 		}
-		courses, err := FindCourses(&Claims{
+		courses, errRes := FindCourses(&Claims{
 			ID:       payload["_id"].(string),
 			UserType: payload["user_type"].(string),
 		})
-		if err != nil {
+		if errRes != nil {
 			return
 		}
 
@@ -258,10 +260,13 @@ func (module *ModulesService) GetModuleFromID(idModule string) (*models.Module, 
 	return moduleData, nil
 }
 
-func (module *ModulesService) GetModule(moduleId string) (*models.ModuleWithLookup, error) {
+func (module *ModulesService) GetModule(moduleId string) (*models.ModuleWithLookup, *res.ErrorRes) {
 	objId, err := primitive.ObjectIDFromHex(moduleId)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 
 	var moduleData []*models.ModuleWithLookup
@@ -282,15 +287,21 @@ func (module *ModulesService) GetModule(moduleId string) (*models.ModuleWithLook
 		getProject(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursor.All(db.Ctx, &moduleData); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return moduleData[0], nil
 }
 
-func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string, simple bool) ([]models.ModuleWithLookup, error) {
+func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string, simple bool) ([]models.ModuleWithLookup, *res.ErrorRes) {
 	// Section IDs must be > 0
 	if len(sectionIds) == 0 {
 		return nil, nil
@@ -307,10 +318,16 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 		getProject(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursor.All(db.Ctx, &modulesData); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 
 	if len(modulesData) == 0 {
@@ -324,11 +341,17 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 		}
 		data, err := json.Marshal(images)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 		msg, err := nats.Request("get_aws_token_access", data)
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 
 		var imagesURLs []string
@@ -339,11 +362,14 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 		}
 		// Get next works
 		var wg sync.WaitGroup
+		c := make(chan (int), 5)
+		var errRes *res.ErrorRes
 
 		for i, module := range modulesData {
 			wg.Add(1)
+			c <- 1
 
-			go func(module models.ModuleWithLookup, i int, wg *sync.WaitGroup, errRet *error) {
+			go func(module models.ModuleWithLookup, i int, wg *sync.WaitGroup, errRet *res.ErrorRes) {
 				defer wg.Done()
 
 				var works []models.Work
@@ -384,19 +410,28 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 					project,
 				})
 				if err != nil {
-					*errRet = err
+					*errRet = res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusServiceUnavailable,
+					}
+					close(c)
 					return
 				}
 				if err := cursor.All(db.Ctx, &works); err != nil {
-					*errRet = err
+					*errRet = res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusServiceUnavailable,
+					}
+					close(c)
 					return
 				}
 				modulesData[i].Works = works
-			}(module, i, &wg, &err)
+				<-c
+			}(module, i, &wg, errRes)
 		}
 		wg.Wait()
-		if err != nil {
-			return nil, err
+		if errRes != nil {
+			return nil, errRes
 		}
 	}
 	// Get only courses
@@ -410,12 +445,15 @@ func (module *ModulesService) GetModulesHistory(
 	total bool,
 	simple bool,
 	idSemester string,
-) ([]models.ModuleWithLookup, int, error) {
+) ([]models.ModuleWithLookup, int, *res.ErrorRes) {
 	var totalModules int
 
 	idObjStudent, err := primitive.ObjectIDFromHex(idUser)
 	if err != nil {
-		return nil, totalModules, err
+		return nil, totalModules, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Find modules
 	var modules []models.ModuleHistory
@@ -433,7 +471,10 @@ func (module *ModulesService) GetModulesHistory(
 	} else {
 		idObjSemester, err := primitive.ObjectIDFromHex(idSemester)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusBadRequest,
+			}
 		}
 		match = bson.D{{
 			Key: "$match",
@@ -477,11 +518,17 @@ func (module *ModulesService) GetModulesHistory(
 	}
 	cursor, err := moduleHistoryModel.Aggreagate(pipeline)
 	if err != nil {
-		return nil, totalModules, err
+		return nil, totalModules, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	err = cursor.All(db.Ctx, &modules)
 	if err != nil {
-		return nil, totalModules, err
+		return nil, totalModules, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get modules data
 	modulesId := bson.A{}
@@ -507,10 +554,16 @@ func (module *ModulesService) GetModulesHistory(
 		getProject(),
 	})
 	if err != nil {
-		return nil, totalModules, err
+		return nil, totalModules, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if err := cursor.All(db.Ctx, &modulesData); err != nil {
-		return nil, totalModules, err
+		return nil, totalModules, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	// Get aws keys
 	if !simple {
@@ -520,11 +573,17 @@ func (module *ModulesService) GetModulesHistory(
 		}
 		data, err := json.Marshal(images)
 		if err != nil {
-			return nil, totalModules, err
+			return nil, totalModules, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusInternalServerError,
+			}
 		}
 		msg, err := nats.Request("get_aws_token_access", data)
 		if err != nil {
-			return nil, totalModules, err
+			return nil, totalModules, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 
 		var imagesURLs []string
@@ -542,7 +601,10 @@ func (module *ModulesService) GetModulesHistory(
 				},
 			}})
 			if err != nil {
-				return nil, totalModules, err
+				return nil, totalModules, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
 			totalModules = int(totalOfDocuments)
 		}
@@ -569,7 +631,7 @@ func (module *ModulesService) GetAllModulesSemester() ([]models.Module, error) {
 func (module *ModulesService) NewSubSection(
 	subSectionData *forms.SubSectionData,
 	idSection string,
-) (interface{}, error) {
+) (interface{}, *res.ErrorRes) {
 	sectionId := primitive.NewObjectID()
 	subSection := &models.SubSection{
 		ID:   sectionId,
@@ -577,7 +639,10 @@ func (module *ModulesService) NewSubSection(
 	}
 	objId, err := primitive.ObjectIDFromHex(idSection)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	_, err = moduleModel.Use().UpdateByID(db.Ctx, objId, bson.M{
 		"$push": bson.M{
@@ -585,12 +650,15 @@ func (module *ModulesService) NewSubSection(
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	return sectionId.Hex(), nil
 }
 
-func (module *ModulesService) Search(idModule, search string) (interface{}, error) {
+func (module *ModulesService) Search(idModule, search string) (interface{}, *res.ErrorRes) {
 	simpleQuery := fmt.Sprintf(
 		`"bool": {"must": { "simple_query_string": { "query": "%s*", "analyzer": "standard" } },`,
 		search,
@@ -602,24 +670,36 @@ func (module *ModulesService) Search(idModule, search string) (interface{}, erro
 	var buf bytes.Buffer
 
 	if err := json.NewEncoder(&buf).Encode(query); err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
 	es, err := db.NewConnectionEs()
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
-	res, err := es.Search(
+	response, err := es.Search(
 		es.Search.WithContext(context.Background()),
 		es.Search.WithIndex(models.PUBLICATIONS_INDEX, models.WORKS_INDEX),
 		es.Search.WithBody(query),
 		es.Search.WithTrackTotalHits(true),
 	)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
-	defer res.Body.Close()
-	if err := json.NewDecoder(res.Body).Decode(&mapRes); err != nil {
-		return nil, err
+	defer response.Body.Close()
+	if err := json.NewDecoder(response.Body).Decode(&mapRes); err != nil {
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
 	return mapRes["hits"], nil
 }
@@ -628,50 +708,77 @@ func (module *ModulesService) DownloadModuleFile(
 	idModule,
 	idFile string,
 	claims *Claims,
-) ([]string, error) {
+) ([]string, *res.ErrorRes) {
 	idFileObj, err := primitive.ObjectIDFromHex(idFile)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	idUserObj, err := primitive.ObjectIDFromHex(claims.ID)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// Get file data
 	file, err := fileModel.GetFileByID(idFileObj)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
 	if file.ID == idUserObj {
 		tokenUrls, err := GetAwsTokenFiles([]string{file.Key})
 		if err != nil {
-			return nil, err
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
-		return tokenUrls, err
+		return tokenUrls, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusBadRequest,
+		}
 	}
 	// If is a Student
 	if file.Permissions == "private" {
-		return nil, fmt.Errorf("No tienes acceso a este archivo")
+		return nil, &res.ErrorRes{
+			Err:        fmt.Errorf("No tienes acceso a este archivo"),
+			StatusCode: http.StatusUnauthorized,
+		}
 	}
 	moduleData, err := module.GetModuleFromID(idModule)
 	if err != nil {
-		return nil, err
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
 	}
-	courses, err := FindCourses(claims)
-	if err != nil {
-		return nil, err
+	courses, errRes := FindCourses(claims)
+	if errRes != nil {
+		return nil, errRes
 	}
 
 	for _, course := range courses {
 		if course.IDCourse.Hex() == moduleData.Section.Hex() {
 			tokenUrls, err := GetAwsTokenFiles([]string{file.Key})
 			if err != nil {
-				return nil, err
+				return nil, &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
 			}
-			return tokenUrls, err
+			return tokenUrls, nil
 		}
 	}
-	return nil, fmt.Errorf("No tienes acceso a este archivo")
+	return nil, &res.ErrorRes{
+		Err:        fmt.Errorf("No tienes acceso a este archivo"),
+		StatusCode: http.StatusUnauthorized,
+	}
 }
 
 func NewModulesService() *ModulesService {

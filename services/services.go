@@ -5,6 +5,7 @@ import (
 
 	"github.com/CPU-commits/Intranet_BClassroom/aws_s3"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	"github.com/CPU-commits/Intranet_BClassroom/repositories"
 	"github.com/CPU-commits/Intranet_BClassroom/settings"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	"github.com/google/uuid"
@@ -29,6 +30,11 @@ var (
 	publicationModel      = models.NewPublicationModel()
 	fileModel             = models.NewFileModel()
 	fileUCModel           = models.NewFileUCModel()
+)
+
+// Repositories
+var (
+	workRepository = repositories.NewWorkRepository()
 )
 
 // Packages
