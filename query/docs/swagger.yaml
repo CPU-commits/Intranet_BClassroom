@@ -1,0 +1,3094 @@
+basePath: /api/c/classroom
+consumes:
+- application/json
+definitions:
+  forms.AcumulativeForm:
+    properties:
+      number:
+        example: 1
+        minimum: 1
+        type: integer
+      percentage:
+        example: 45
+        type: number
+    required:
+    - number
+    - percentage
+    type: object
+  forms.Answer:
+    properties:
+      answer:
+        example: 1
+        type: integer
+      question:
+        type: string
+      response:
+        example: Response...
+        type: string
+    required:
+    - question
+    type: object
+  forms.AnswerForm:
+    properties:
+      answer:
+        example: 1
+        type: integer
+      response:
+        example: Response...
+        type: string
+    type: object
+  forms.AnswersForm:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/forms.Answer'
+        type: array
+    required:
+    - answers
+    type: object
+  forms.Attached:
+    properties:
+      file:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      link:
+        example: https://example.com
+        type: string
+      title:
+        example: Title!
+        type: string
+      type:
+        example: file
+        type: string
+    required:
+    - type
+    type: object
+  forms.EvaluateFilesForm:
+    properties:
+      pattern:
+        example: Pattern
+        type: string
+      points:
+        example: 25
+        minimum: 0
+        type: integer
+    required:
+    - pattern
+    - points
+    type: object
+  forms.EvaluateQuestion:
+    properties:
+      points:
+        example: 25
+        type: integer
+    required:
+    - points
+    type: object
+  forms.FormForm:
+    properties:
+      has_points:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/forms.ItemForm'
+        minItems: 1
+        type: array
+      title:
+        example: Form title
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - has_points
+    - items
+    - title
+    type: object
+  forms.GradeForm:
+    properties:
+      acumulative:
+        example: 637ab12ae976057567a4d67d
+        type: string
+      grade:
+        example: 70
+        type: number
+      program:
+        example: 637ab12ae976057567a4d67d
+        type: string
+    required:
+    - grade
+    - program
+    type: object
+  forms.GradeProgramForm:
+    properties:
+      acumulative:
+        items:
+          $ref: '#/definitions/forms.AcumulativeForm'
+        type: array
+      is_acumulative:
+        type: boolean
+      number:
+        example: 1
+        maximum: 30
+        minimum: 1
+        type: integer
+      percentage:
+        example: 25
+        type: number
+    required:
+    - is_acumulative
+    - number
+    - percentage
+    type: object
+  forms.ItemForm:
+    description: points required if type == "equal"
+    properties:
+      _id:
+        example: 637846a8bc4ea33de990c098
+        type: string
+      points:
+        example: 25
+        type: integer
+      points_type:
+        enum:
+        - without
+        - equal
+        - custom
+        example: without
+        type: string
+      questions:
+        items:
+          $ref: '#/definitions/forms.QuestionForm'
+        type: array
+      title:
+        example: Item Form Title !
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - _id
+    - points
+    - questions
+    - title
+    type: object
+  forms.QuestionForm:
+    description: correct required if type == "alternatives_correct" points required
+      if (father)item.type != "equal"
+    properties:
+      _id:
+        example: 637846a8bc4ea33de990c098
+        type: string
+      answers:
+        example:
+        - a
+        - ' b'
+        - ' c'
+        items:
+          type: string
+        type: array
+      correct:
+        example: 0
+        type: integer
+      points:
+        example: 21
+        type: integer
+      question:
+        example: Who is...?
+        minLength: 3
+        type: string
+      type:
+        enum:
+        - alternatives
+        - alternatives_correct
+        - written
+        example: alternatives
+        type: string
+    required:
+    - question
+    - type
+    type: object
+  forms.UpdateGradeForm:
+    properties:
+      grade:
+        example: 55
+        type: number
+    required:
+    - grade
+    type: object
+  forms.UpdateWorkForm:
+    properties:
+      attached:
+        items:
+          $ref: '#/definitions/forms.Attached'
+        type: array
+      date_limit:
+        example: 2006-01-02 15:04
+        type: string
+      date_start:
+        example: 2006-01-02 15:04
+        type: string
+      description:
+        example: This is a description...
+        maxLength: 150
+        type: string
+      form:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      form_access:
+        enum:
+        - default
+        - wtime
+        type: string
+      grade:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      pattern:
+        items:
+          $ref: '#/definitions/forms.WorkPatternWIDFiles'
+        type: array
+      time_access:
+        description: Seconds
+        example: 3600
+        type: integer
+      title:
+        example: Title!
+        maxLength: 100
+        minLength: 1
+        type: string
+    type: object
+  forms.WorkForm:
+    properties:
+      acumulative:
+        type: string
+      attached:
+        items:
+          $ref: '#/definitions/forms.Attached'
+        type: array
+      date_limit:
+        example: 2006-01-02 15:04
+        type: string
+      date_start:
+        example: 2006-01-02 15:04
+        type: string
+      description:
+        example: This is a description...
+        maxLength: 150
+        type: string
+      form:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      form_access:
+        enum:
+        - default
+        - wtime
+        example: wtime
+        type: string
+      grade:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      is_qualified:
+        type: boolean
+      pattern:
+        items:
+          $ref: '#/definitions/forms.WorkPatternFiles'
+        type: array
+      time_access:
+        description: Seconds
+        example: 3600
+        type: integer
+      title:
+        example: Title!
+        maxLength: 100
+        minLength: 1
+        type: string
+      type:
+        enum:
+        - files
+        - form
+        example: files
+        type: string
+    required:
+    - date_limit
+    - date_start
+    - is_qualified
+    - title
+    - type
+    type: object
+  forms.WorkPatternFiles:
+    properties:
+      description:
+        example: This is a description...
+        maxLength: 300
+        minLength: 1
+        type: string
+      points:
+        example: 25
+        minimum: 1
+        type: integer
+      title:
+        example: Title!
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - description
+    - points
+    - title
+    type: object
+  forms.WorkPatternWIDFiles:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      description:
+        example: This is a description...
+        maxLength: 300
+        minLength: 1
+        type: string
+      points:
+        example: 25
+        minimum: 1
+        type: integer
+      title:
+        example: Title!
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - description
+    - points
+    - title
+    type: object
+  models.Acumulative:
+    properties:
+      _id:
+        example: 637850aafa8118c9f0f1202a
+        type: string
+      number:
+        example: 1
+        type: integer
+      percentage:
+        example: 20
+        type: number
+    type: object
+  models.Answer:
+    properties:
+      answer:
+        example: 1
+        type: integer
+      date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      question:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      response:
+        example: Response...
+        type: string
+      student:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      work:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+    type: object
+  models.Attached:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      file:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+        x-omitempty: true
+      link:
+        example: https://example.com
+        type: string
+        x-omitempty: true
+      title:
+        example: This is a title
+        type: string
+        x-omitempty: true
+      type:
+        description: Link or file
+        enum:
+        - link
+        - file
+        example: link
+        type: string
+    type: object
+  models.Course:
+    properties:
+      __v:
+        type: integer
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      course:
+        example: First
+        type: string
+    type: object
+  models.EvaluatedFiles:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      pattern:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      points:
+        example: 25
+        type: integer
+    type: object
+  models.File:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      filename:
+        example: filename.png
+        type: string
+      key:
+        example: $53r34re
+        type: string
+      permissions:
+        enum:
+        - private
+        - public
+        - public_classroom
+        example: private
+        type: string
+      status:
+        type: boolean
+      title:
+        example: Title
+        type: string
+      type:
+        example: application/pdf
+        type: string
+      url:
+        example: https://example.com/file
+        type: string
+    type: object
+  models.FileUploadedClassroomWLookup:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      evaluate:
+        items:
+          $ref: '#/definitions/models.EvaluatedFiles'
+        type: array
+        x-omitempty: true
+      files_uploaded:
+        items:
+          $ref: '#/definitions/models.File'
+        type: array
+      student:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      work:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+    type: object
+  models.Form:
+    properties:
+      _id:
+        example: 6376c8283cc695e19d785b08
+        type: string
+      author:
+        example: 6376c8283cc695e19d785b08
+        type: string
+      has_points:
+        example: true
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/models.FormItem'
+        type: array
+      status:
+        type: boolean
+      title:
+        example: This is a form!
+        type: string
+      update_date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      upload_date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+    type: object
+  models.FormAccess:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      status:
+        enum:
+        - opened
+        - finished
+        - revised
+        example: opened
+        type: string
+      student:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      work:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+    type: object
+  models.FormItem:
+    properties:
+      _id:
+        example: 6376c8283cc695e19d785b08
+        type: string
+      points_type:
+        type: string
+        x-omitempty: true
+      questions:
+        example:
+        - 6376c8283cc695e19d785b08
+        items:
+          type: string
+        type: array
+      title:
+        example: This is a item form!
+        type: string
+    type: object
+  models.FormItemWLookup:
+    properties:
+      _id:
+        example: 6376c8283cc695e19d785b08
+        type: string
+      points_type:
+        type: string
+        x-omitempty: true
+      questions:
+        items:
+          $ref: '#/definitions/models.ItemQuestion'
+        type: array
+      title:
+        example: This is a item title!
+        type: string
+    type: object
+  models.FormWLookup:
+    properties:
+      _id:
+        example: 6376c8283cc695e19d785b08
+        type: string
+      has_points:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/models.FormItemWLookup'
+        type: array
+      title:
+        example: This is a form!
+        type: string
+      update_date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      upload_date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+    type: object
+  models.GradesProgram:
+    properties:
+      _id:
+        example: 637850aafa8118c9f0f1202a
+        type: string
+      acumulative:
+        items:
+          $ref: '#/definitions/models.Acumulative'
+        type: array
+        x-omitempty: true
+      is_acumulative:
+        type: boolean
+      module:
+        example: 637850aafa8118c9f0f1202a
+        type: string
+      number:
+        example: 3
+        type: integer
+      percentage:
+        example: 25
+        type: number
+    type: object
+  models.ItemQuestion:
+    description: Points is null if (father)form.has_points = false Answers is null
+      if question.type=written Correct is null if question.type=written || alternatives
+    properties:
+      _id:
+        example: 6376c8283cc695e19d785b08
+        type: string
+      answers:
+        example:
+        - a
+        - ' b'
+        items:
+          type: string
+        type: array
+        x-omitempty: true
+      correct:
+        example: 2
+        type: integer
+        x-omitempty: true
+      points:
+        example: 25
+        type: integer
+        x-omitempty: true
+      question:
+        example: Whats your name?
+        type: string
+      type:
+        example: alternatives_correct
+        type: string
+    type: object
+  models.ModuleWithLookup:
+    properties:
+      __v:
+        type: integer
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      section:
+        $ref: '#/definitions/models.Section'
+      semester:
+        $ref: '#/definitions/models.Semester'
+      status:
+        type: boolean
+      sub_sections:
+        items:
+          $ref: '#/definitions/models.SubSection'
+        type: array
+      subject:
+        $ref: '#/definitions/models.Subject'
+      works:
+        description: Works
+        items:
+          $ref: '#/definitions/models.Work'
+        type: array
+        x-omitempty: true
+    type: object
+  models.Section:
+    properties:
+      __v:
+        type: integer
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      course:
+        $ref: '#/definitions/models.Course'
+      file:
+        $ref: '#/definitions/models.File'
+      section:
+        example: A
+        type: string
+    type: object
+  models.Semester:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      semester:
+        example: 2
+        type: integer
+      year:
+        example: 2022
+        type: integer
+    type: object
+  models.SimpleUser:
+    properties:
+      _id:
+        example: 63785424db1efbc237faecca
+        type: string
+      first_lastname:
+        example: FirstLastname
+        type: string
+        x-omitempty: true
+      name:
+        example: Name
+        type: string
+        x-omitempty: true
+      rut:
+        example: 12345678-9
+        type: string
+        x-omitempty: true
+      second_lastname:
+        example: SecondLastname
+        type: string
+        x-omitempty: true
+    type: object
+  models.SubSection:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      name:
+        example: Math - Geo
+        type: string
+    type: object
+  models.Subject:
+    properties:
+      __v:
+        type: integer
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      subject:
+        example: Math
+        type: string
+    type: object
+  models.Work:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      acumulative:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+        x-omitempty: true
+      attached:
+        items:
+          $ref: '#/definitions/models.Attached'
+        type: array
+        x-omitempty: true
+      author:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      date_limit:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      date_start:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      date_update:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      date_upload:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      description:
+        example: This is a description
+        type: string
+        x-omitempty: true
+      form:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+        x-omitempty: true
+      form_access:
+        enum:
+        - default
+        - wtime
+        example: default
+        type: string
+        x-omitempty: true
+      grade:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+        x-omitempty: true
+      is_qualified:
+        type: boolean
+      is_revised:
+        type: boolean
+      module:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      pattern:
+        items:
+          $ref: '#/definitions/models.WorkPattern'
+        type: array
+        x-omitempty: true
+      time_access:
+        example: 2
+        type: integer
+        x-omitempty: true
+      title:
+        example: Work!
+        type: string
+      type:
+        enum:
+        - files
+        - form
+        example: form
+        type: string
+    type: object
+  models.WorkPattern:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      description:
+        example: This is a description
+        type: string
+      points:
+        example: 25
+        type: integer
+      title:
+        example: Pattern!
+        type: string
+    type: object
+  models.WorkWLookup:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      acumulative:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+        x-omitempty: true
+      attached:
+        items:
+          $ref: '#/definitions/models.Attached'
+        type: array
+      author:
+        $ref: '#/definitions/models.SimpleUser'
+      date_limit:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      date_start:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      date_update:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      date_upload:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      description:
+        example: This is a description
+        type: string
+        x-omitempty: true
+      form:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+        x-omitempty: true
+      form_access:
+        enum:
+        - default
+        - wtime
+        example: default
+        type: string
+        x-omitempty: true
+      grade:
+        $ref: '#/definitions/models.GradesProgram'
+        x-omitempty: true
+      is_qualified:
+        type: boolean
+      is_revised:
+        type: boolean
+      module:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      pattern:
+        items:
+          $ref: '#/definitions/models.WorkPattern'
+        type: array
+        x-omitempty: true
+      time_access:
+        example: 2
+        type: integer
+        x-omitempty: true
+      title:
+        example: This is a title
+        type: string
+      type:
+        enum:
+        - files
+        - form
+        example: files
+        type: string
+    type: object
+  res.Response:
+    properties:
+      body:
+        additionalProperties: true
+        type: object
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  services.AnswerRes:
+    properties:
+      answer:
+        $ref: '#/definitions/models.Answer'
+      evaluate:
+        x-omitempty: true
+    type: object
+  services.AttachedRes:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      file:
+        $ref: '#/definitions/models.File'
+      link:
+        example: https://example.com
+        type: string
+      title:
+        example: This is a title
+        type: string
+      type:
+        enum:
+        - link
+        - file
+        example: link
+        type: string
+    type: object
+  services.PublicationsRes:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      attached:
+        items:
+          $ref: '#/definitions/services.AttachedRes'
+        type: array
+      content:
+        example: Content...
+        type: string
+      update_date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+      upload_date:
+        example: "2022-09-21T20:10:23.309+00:00"
+        type: string
+    type: object
+  services.Student:
+    properties:
+      __v:
+        type: integer
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      access:
+        $ref: '#/definitions/models.FormAccess'
+        x-omitempty: true
+      course:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      evaluate:
+        additionalProperties:
+          type: integer
+        type: object
+        x-omitempty: true
+      files_uploaded:
+        $ref: '#/definitions/models.FileUploadedClassroomWLookup'
+        x-omitempty: true
+      registration_number:
+        example: MDVCW45
+        type: string
+      user:
+        $ref: '#/definitions/models.SimpleUser'
+    type: object
+  services.WorkStatus:
+    properties:
+      _id:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      date_limit:
+        type: string
+      date_start:
+        type: string
+      date_upload:
+        type: string
+      is_qualified:
+        type: boolean
+      module:
+        example: 637d5de216f58bc8ec7f7f51
+        type: string
+      status:
+        type: integer
+      title:
+        example: This is a title
+        type: string
+      type:
+        enum:
+        - files
+        - form
+        example: files
+        type: string
+    type: object
+  smaps.FormMap:
+    properties:
+      form:
+        items:
+          $ref: '#/definitions/models.FormWLookup'
+        type: array
+    type: object
+  smaps.FormWorkMap:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/services.AnswerRes'
+        type: array
+      form:
+        $ref: '#/definitions/models.FormWLookup'
+      work:
+        properties:
+          date_limit:
+            type: string
+          points:
+            properties:
+              max_points:
+                type: integer
+              total_points:
+                type: integer
+            type: object
+          status:
+            type: string
+          wtime:
+            type: boolean
+        type: object
+    type: object
+  smaps.FormsMap:
+    properties:
+      forms:
+        items:
+          $ref: '#/definitions/models.Form'
+        type: array
+    type: object
+  smaps.IdInsertedMap:
+    properties:
+      _id:
+        type: string
+    type: object
+  smaps.InsertedIdMap:
+    properties:
+      inserted_id:
+        type: string
+    type: object
+  smaps.ModuleMap:
+    properties:
+      module:
+        $ref: '#/definitions/models.ModuleWithLookup'
+    type: object
+  smaps.ModulesMap:
+    properties:
+      modules:
+        items:
+          $ref: '#/definitions/models.ModuleWithLookup'
+        type: array
+    type: object
+  smaps.ModulesWorksMap:
+    properties:
+      works:
+        items:
+          $ref: '#/definitions/services.WorkStatus'
+        type: array
+    type: object
+  smaps.NewPublicationMap:
+    properties:
+      _id:
+        type: string
+      attached_ids:
+        items:
+          type: string
+        type: array
+    type: object
+  smaps.ProgramGradeMap:
+    properties:
+      programs:
+        items:
+          $ref: '#/definitions/models.GradesProgram'
+        type: array
+    type: object
+  smaps.PublicationMap:
+    properties:
+      publication:
+        $ref: '#/definitions/services.PublicationsRes'
+    type: object
+  smaps.PublicationsMap:
+    properties:
+      publications:
+        items:
+          $ref: '#/definitions/services.PublicationsRes'
+        type: array
+      total:
+        type: integer
+    type: object
+  smaps.SearchHitsMap:
+    properties:
+      hits: {}
+    type: object
+  smaps.StudentsStatusMap:
+    properties:
+      students:
+        items:
+          $ref: '#/definitions/services.Student'
+        type: array
+      total_points:
+        type: integer
+    type: object
+  smaps.TokenMap:
+    properties:
+      token:
+        type: string
+    type: object
+  smaps.WorksMap:
+    properties:
+      works:
+        items:
+          $ref: '#/definitions/models.WorkWLookup'
+        type: array
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API Server Classroom service
+  license:
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Classroom API
+  version: "1.0"
+paths:
+  /forms/delete_form/{idForm}:
+    delete:
+      consumes:
+      - application/json
+      description: Form own deletes(soft) a form, ROLS=[teacher]
+      parameters:
+      - description: Update form
+        in: body
+        name: form
+        required: true
+        schema:
+          $ref: '#/definitions/forms.FormForm'
+      - description: Mongo ID Form
+        in: path
+        name: idForm
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad request - Bad body
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: No estás autorizado a eliminar este formulario
+          schema:
+            $ref: '#/definitions/res.Response'
+        "403":
+          description: Este formulario está asignado a un trabajo revisado, no se
+            puede editar
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete form of user
+      tags:
+      - classroom
+      - forms
+      - roles.teacher
+  /forms/get_form/{idForm}:
+    get:
+      consumes:
+      - application/json
+      description: Get a single user form, ROLS=[teacher]
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.FormMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe este formulario
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get a single form
+      tags:
+      - forms
+      - classroom
+      - roles.teacher
+  /forms/get_forms:
+    get:
+      consumes:
+      - application/json
+      description: Get forms generated for user
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.FormsMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get forms of user, ROLES=[teacher]
+      tags:
+      - forms
+      - classroom
+      - roles.teacher
+  /forms/update_form/{idForm}:
+    put:
+      consumes:
+      - application/json
+      description: Update a form to teacher, ROLS=[teacher]
+      parameters:
+      - description: Update form
+        in: body
+        name: form
+        required: true
+        schema:
+          $ref: '#/definitions/forms.FormForm'
+      - description: Mongo ID Form
+        in: path
+        name: idForm
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad request - Bad body
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "403":
+          description: Este formulario está asignado a un trabajo revisado, no se
+            puede editar
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Update form to user
+      tags:
+      - classroom
+      - forms
+      - roles.teacher
+  /forms/upload_form:
+    post:
+      consumes:
+      - application/json
+      description: Upload a form to teacher, ROLS=[teacher]
+      parameters:
+      - description: Add form
+        in: body
+        name: form
+        required: true
+        schema:
+          $ref: '#/definitions/forms.FormForm'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad request - Bad body
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload form to user
+      tags:
+      - classroom
+      - forms
+      - roles.teacher
+  /grades/delete_program/{idModule}/{idProgram}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete grade program in module, ROLS=[teacher]
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idProgram
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe la programación de calificación
+          schema:
+            $ref: '#/definitions/res.Response'
+        "409":
+          description: Esta programación está en uso en alguna calificación
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable"..
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete grade program
+      tags:
+      - grades
+      - classroom
+      - roles.teacher
+  /grades/download_grades:
+    get:
+      consumes:
+      - application/json
+      description: Get student grades (in a semester) -> export to PDF
+      parameters:
+      - description: MongoID
+        in: query
+        name: semester
+        required: true
+        type: string
+      produces:
+      - application/pdf
+      responses:
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+        "510":
+          description: Buffer io.Writter
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Export student grades
+      tags:
+      - grades
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /grades/export_grades/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: Get student grades (in a module) -> export to Excel
+      parameters:
+      - description: Mongo ID Form
+        in: path
+        name: idModule
+        required: true
+        type: string
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+        "510":
+          description: Buffer io.Writter
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Export grades
+      tags:
+      - grades
+      - classroom
+      - roles.teacher
+      - roles.directive
+      - roles.director
+  /grades/get_grade_programs/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: Get program grade by MongoId (Sort by program number)
+      parameters:
+      - description: Mongo ID Form
+        in: path
+        name: idModule
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.ProgramGradeMap'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get program grade
+      tags:
+      - grades
+      - classroom
+      - roles.all
+  /grades/get_student_grades/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: Get student grades (in a module)
+      parameters:
+      - description: Mongo ID Form
+        in: path
+        name: idModule
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get student grades
+      tags:
+      - grades
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /grades/get_students_grades/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: Get all students and their grades (in a module)
+      parameters:
+      - description: Mongo ID Form
+        in: path
+        name: idModule
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get students grades
+      tags:
+      - grades
+      - classroom
+      - roles.teacher
+      - roles.director
+      - roles.directive
+  /grades/update_grade/{idModule}/{idGrade}:
+    put:
+      consumes:
+      - application/json
+      description: Update grade in module to student, ROLS=[teacher]
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idGrade
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: grade
+        required: true
+        schema:
+          $ref: '#/definitions/forms.UpdateGradeForm'
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: 'Calificación inválida. Mín: %v. Máx: %v'
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe la programación de calificación
+          schema:
+            $ref: '#/definitions/res.Response'
+        "409":
+          description: Esta calificación no pertenece al módulo
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable"..
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Update grade
+      tags:
+      - grades
+      - classroom
+      - roles.teacher
+  /grades/upload_grade/{idModule}/{idStudent}:
+    post:
+      consumes:
+      - application/json
+      description: Upload grade in module to student, ROLS=[teacher]
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idStudent
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: grade
+        required: true
+        schema:
+          $ref: '#/definitions/forms.GradeForm'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.IdInsertedMap'
+              type: object
+        "400":
+          description: 'Calificación inválida. Mín: %v. Máx: %v'
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "409":
+          description: No se puede agregar una calificación ya subida
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload grade
+      tags:
+      - grades
+      - classroom
+      - roles.teacher
+  /grades/upload_program/{idModule}:
+    post:
+      consumes:
+      - application/json
+      description: Upload program grade in module, ROLS=[teacher]
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: programGrade
+        required: true
+        schema:
+          $ref: '#/definitions/forms.GradeProgramForm'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.IdInsertedMap'
+              type: object
+        "400":
+          description: El porcentaje sumatorio de las calificaciones acumulativas
+            debe ser exactamente 100 por cierto
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "409":
+          description: Esta calificación ya está programada
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload program grade
+      tags:
+      - grades
+      - classroom
+      - roles.teacher
+  /modules/download_file/{idFile}/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: Download file of module
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idFile
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.TokenMap'
+              type: object
+        "400":
+          description: Bad path params
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Download file module
+      tags:
+      - modules
+      - classroom
+      - roles.teacher
+      - roles.student
+      - roles.student_directive
+  /modules/get_module/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: Get module
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.ModuleMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get module
+      tags:
+      - modules
+      - classroom
+      - roles.teacher
+      - roles.student
+      - roles.student_directive
+  /modules/get_modules:
+    get:
+      consumes:
+      - application/json
+      description: Get user modules
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.ModulesMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "403":
+          description: No estás asignado a ningún curso
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get modules
+      tags:
+      - modules
+      - classroom
+      - roles.teacher
+      - roles.student
+      - roles.student_directive
+  /modules/get_modules_history:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: Get total?
+        in: query
+        name: total
+        type: boolean
+      - description: Limit
+        in: query
+        name: limit
+        type: integer
+      - description: Skip
+        in: query
+        name: skip
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "400":
+          description: Bad query param
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      tags:
+      - modules
+      - roles.student
+      - roles.student_directive
+  /modules/new_sub_section/{idModule}:
+    post:
+      consumes:
+      - application/json
+      description: New sub section to module
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.InsertedIdMap'
+              type: object
+        "400":
+          description: Bad path params
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: New sub section
+      tags:
+      - modules
+      - classroom
+      - roles.teacher
+  /modules/search/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: search in all module content
+      parameters:
+      - description: Desc
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: Search
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.SearchHitsMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: search
+      tags:
+      - modules
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /publications/delete/{idPublication}/{idModule}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idPublication
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad path param
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Not Access module
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: Publication not found
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete publication
+      tags:
+      - publications
+      - classroom
+      - roles.teacher
+  /publications/delete_attached/{idAttached}/{idModule}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idAttached
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Esta publicación no tiene elementos adjuntos
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe el elemento adjunto
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete publication attached
+      tags:
+      - publications
+      - classroom
+      - roles.teacher
+  /publications/get_publication/{idModule}/{idPublication}:
+    get:
+      consumes:
+      - application/json
+      description: Get module publication
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idPublication
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.PublicationMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get publication
+      tags:
+      - publications
+      - classroom
+      - roles.teacher
+      - roles.student
+      - roles.student_directive
+  /publications/get_publications/{idModule}:
+    get:
+      consumes:
+      - application/json
+      description: Get module publications
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: Section
+        in: query
+        name: section
+        type: integer
+      - description: Skip
+        in: query
+        name: skip
+        type: integer
+      - description: Limit
+        in: query
+        name: limit
+        type: integer
+      - description: Get total?
+        in: query
+        name: total
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.PublicationsMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe esta sección
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get publications
+      tags:
+      - publications
+      - classroom
+      - roles.teacher
+      - roles.student
+      - roles.student_directive
+  /publications/update/{idPublication}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idPublication
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad path param
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: No tienes acceso a esta publicación
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: Publication not found
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Update publication
+      tags:
+      - publications
+      - classroom
+      - roles.teacher
+  /publications/upload/{idModule}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: 'Default: 0'
+        in: query
+        name: section
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.NewPublicationMap'
+              type: object
+        "400":
+          description: No existe esta sección
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: New publication
+      tags:
+      - publications
+      - classroom
+      - roles.teacher
+  /works/delete_attached/{idWork}/{idAttached}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idAttached
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad path param
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe este elemento adjunto al trabajo
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete Attached
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/delete_file_work/{idWork}/{idFile}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idFile
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: No se puede eliminar un trabajo calificado
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No se encontró el archivo a eliminar en este trabajo
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete file classroom
+      tags:
+      - works
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /works/delete_item_pattern/{idWork}/{idItem}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idItem
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad path param
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe el item a eliminar
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete Item Pattern
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/delete_work/{idWork}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: No se puede eliminar un trabajo calificado
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Delete work
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/download_files_work_student/{idWork}/{idStudent}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idStudent
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Zip file
+          schema:
+            type: file
+        "400":
+          description: Bad path param
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Download files work student
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/finish_form/{idWork}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: answers
+        required: true
+        schema:
+          $ref: '#/definitions/forms.AnswersForm'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Finish form
+      tags:
+      - works
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /works/get_form/{idWork}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.FormWorkMap'
+              type: object
+        "400":
+          description: No accediste al formulario, no hay respuestas a revisar
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get form
+      tags:
+      - works
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /works/get_form_student/{idWork}/{idStudent}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idStudent
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Este alumno no ha tiene respuestas, ya que no abrió el formulario
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get form student
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/get_modules_works:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.ModulesWorksMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get modules works
+      tags:
+      - works
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /works/get_students_status/{idModule}/{idWork}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.StudentsStatusMap'
+              type: object
+        "400":
+          description: Ningún estudiante pertenece a este trabajo
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get students status
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/get_work/{idWork}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get work
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+      - roles.student
+      - roles.student_directive
+  /works/get_works/{idModule}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/res.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/smaps.WorksMap'
+              type: object
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Get works
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+      - roles.student
+      - roles.student_directive
+  /works/grade_files/{idWork}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: No existen alumnos a evaluar en este trabajo
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "403":
+          description: Este trabajo ya está evaluado
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Grade files
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/grade_form/{idWork}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: No existen alumnos a evaluar en este trabajo
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "403":
+          description: Este trabajo ya está evaluado
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Grade form
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/save_answer/{idWork}/{idQuestion}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idQuestion
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: answer
+        required: true
+        schema:
+          $ref: '#/definitions/forms.AnswerForm'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: El trabajo no es de tipo formulario
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Save answer
+      tags:
+      - works
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /works/update_work/{idWork}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: work
+        required: true
+        schema:
+          $ref: '#/definitions/forms.UpdateWorkForm'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: La fecha y hora de inicio registrada es mayor a la limite
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No se puede actualizar un item que no está registrado
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Update work
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/upload_evaluate_files/{idWork}/{idStudent}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idStudent
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: evaluate
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/forms.EvaluateFilesForm'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Los puntos evaluados superan el máx. del item
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: 'No existe el item #%s en este trabajo'
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: No se encontraron archivos subidos por parte del alumno
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload evaluate files
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/upload_files/{idWork}:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: Form Data in files[]
+        in: formData
+        items:
+          type: file
+        name: files[]
+        required: true
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "413":
+          description: Solo se puede subir hasta 3 archivos por trabajo
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload files
+      tags:
+      - works
+      - classroom
+      - roles.student
+      - roles.student_directive
+  /works/upload_points_question/{idWork}/{idQuestion}/{idStudent}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idQuestion
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idStudent
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: points
+        required: true
+        schema:
+          $ref: '#/definitions/forms.EvaluateQuestion'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Puntaje fuera de rango. Debe ser entre cero y máx %v
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Todavía no se pueden evaluar preguntas en este formulario
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: No existe la programación de calificación
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload points question
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/upload_reevaluate_files/{idWork}/{idStudent}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idWork
+        required: true
+        type: string
+      - description: MongoID
+        in: path
+        name: idStudent
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: evaluate
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/forms.EvaluateFilesForm'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Los puntos evaluados superan el máx. del item
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "404":
+          description: 'No existe el item #%s en este trabajo'
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: No se encontraron archivos subidos por parte del alumno
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload reevaluate files
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+  /works/upload_work/{idModule}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MongoID
+        in: path
+        name: idModule
+        required: true
+        type: string
+      - description: Desc
+        in: body
+        name: work
+        required: true
+        schema:
+          $ref: '#/definitions/forms.WorkForm'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/res.Response'
+        "400":
+          description: Bad path param
+          schema:
+            $ref: '#/definitions/res.Response'
+        "401":
+          description: Unauthorized role
+          schema:
+            $ref: '#/definitions/res.Response'
+        "503":
+          description: Service Unavailable - NATS || DB Service Unavailable
+          schema:
+            $ref: '#/definitions/res.Response'
+      summary: Upload work
+      tags:
+      - works
+      - classroom
+      - roles.teacher
+produces:
+- application/json
+schemes:
+- http
+- https
+securityDefinitions:
+  ApiKeyAuth:
+    description: BearerJWTToken in Authorization Header
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
+tags:
+- description: Service of classroom
+  name: classroom

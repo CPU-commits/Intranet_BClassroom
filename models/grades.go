@@ -18,18 +18,18 @@ var gradesProgramModel *GradesProgramModel
 var gradesModel *GradesModel
 
 type Acumulative struct {
-	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Number     int                `json:"number" bson:"number"`
-	Percentage float32            `json:"percentage" bson:"percentage"`
+	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637850aafa8118c9f0f1202a"`
+	Number     int                `json:"number" bson:"number" example:"1"`
+	Percentage float32            `json:"percentage" bson:"percentage" example:"20"`
 }
 
 type GradesProgram struct {
-	ID            primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Module        primitive.ObjectID `json:"module" bson:"module"`
-	Number        int                `json:"number" bson:"number"`
-	Percentage    float32            `json:"percentage" bson:"percentage"`
+	ID            primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637850aafa8118c9f0f1202a"`
+	Module        primitive.ObjectID `json:"module" bson:"module" example:"637850aafa8118c9f0f1202a"`
+	Number        int                `json:"number" bson:"number" example:"3"`
+	Percentage    float32            `json:"percentage" bson:"percentage" example:"25"`
 	IsAcumulative bool               `json:"is_acumulative" bson:"is_acumulative"`
-	Acumulative   []Acumulative      `json:"acumulative,omitempty" bson:"acumulative,omitempty"`
+	Acumulative   []Acumulative      `json:"acumulative,omitempty" bson:"acumulative,omitempty" extensions:"x-omitempty"`
 }
 
 type Grade struct {
@@ -45,14 +45,14 @@ type Grade struct {
 }
 
 type GradeWLookup struct {
-	ID          primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Module      primitive.ObjectID `json:"module" bson:"module"`
-	Student     primitive.ObjectID `json:"student" bson:"student"`
-	Program     primitive.ObjectID `json:"program" bson:"program"`
-	Acumulative primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty"`
-	Evaluator   SimpleUser         `json:"evaluator" bson:"evaluator,omitempty"`
-	Grade       float64            `json:"grade" bson:"grade"`
-	Date        primitive.DateTime `json:"date" bson:"date"`
+	ID          primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Module      primitive.ObjectID `json:"module" bson:"module" example:"637d5de216f58bc8ec7f7f51"`
+	Student     primitive.ObjectID `json:"student" bson:"student" example:"637d5de216f58bc8ec7f7f51"`
+	Program     primitive.ObjectID `json:"program" bson:"program" example:"637d5de216f58bc8ec7f7f51"`
+	Acumulative primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
+	Evaluator   SimpleUser         `json:"evaluator" bson:"evaluator,omitempty" extensions:"x-omitempty"`
+	Grade       float64            `json:"grade" bson:"grade" example:"30"`
+	Date        primitive.DateTime `json:"date" bson:"date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 type GradesProgramModel struct {

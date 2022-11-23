@@ -15,11 +15,11 @@ const FORM_ACCESS_COLLECTION = "students_access_form"
 var formAcessModel *FormAccessModel
 
 type FormAccess struct {
-	ID      primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Student primitive.ObjectID `json:"student" bson:"student"`
-	Work    primitive.ObjectID `json:"work" bson:"work"`
-	Date    primitive.DateTime `json:"date" bson:"date"`
-	Status  string             `json:"status" bson:"status"`
+	ID      primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Student primitive.ObjectID `json:"student" bson:"student" example:"637d5de216f58bc8ec7f7f51"`
+	Work    primitive.ObjectID `json:"work" bson:"work" example:"637d5de216f58bc8ec7f7f51"`
+	Date    primitive.DateTime `json:"date" bson:"date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	Status  string             `json:"status" bson:"status" enums:"opened,finished,revised" example:"opened"`
 }
 
 type FormAccessModel struct {

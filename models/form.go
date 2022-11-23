@@ -18,48 +18,51 @@ var formModel *FormModel
 var formQuestionModel *FormQuestionModel
 
 // Types
+// @Description Points is null if (father)form.has_points = false
+// @Description Answers is null if question.type=written
+// @Description Correct is null if question.type=written || alternatives
 type ItemQuestion struct {
-	ID       primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Type     string             `json:"type" bson:"type"`
-	Question string             `json:"question" bson:"question"`
-	Answers  []string           `json:"answers" bson:"answers,omitempty"`
-	Points   int                `json:"points,omitempty" bson:"points,omitempty"`
-	Correct  int                `json:"correct" bson:"correct,omitempty"`
+	ID       primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"6376c8283cc695e19d785b08"`
+	Type     string             `json:"type" bson:"type" example:"alternatives_correct"`
+	Question string             `json:"question" bson:"question" example:"Whats your name?"`
+	Answers  []string           `json:"answers" bson:"answers,omitempty" example:"a, b" extensions:"x-omitempty"`
+	Points   int                `json:"points,omitempty" bson:"points,omitempty" example:"25" extensions:"x-omitempty"`
+	Correct  int                `json:"correct" bson:"correct,omitempty" example:"2" extensions:"x-omitempty"`
 }
 
 type FormItem struct {
-	ID         primitive.ObjectID   `json:"_id" bson:"_id,omitempty"`
-	Title      string               `json:"title" bson:"title"`
-	PointsType string               `json:"points_type,omitempty" bson:"points_type,omiempty"`
-	Questions  []primitive.ObjectID `json:"questions" bson:"questions"`
+	ID         primitive.ObjectID   `json:"_id" bson:"_id,omitempty" example:"6376c8283cc695e19d785b08"`
+	Title      string               `json:"title" bson:"title" example:"This is a item form!"`
+	PointsType string               `json:"points_type,omitempty" bson:"points_type,omiempty" extensions:"x-omitempty"`
+	Questions  []primitive.ObjectID `json:"questions" bson:"questions" example:"6376c8283cc695e19d785b08"`
 }
 
 type Form struct {
-	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Author     primitive.ObjectID `json:"author" bson:"author"`
-	Title      string             `json:"title" bson:"title"`
-	HasPoints  bool               `json:"has_points" bson:"has_points"`
+	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"6376c8283cc695e19d785b08"`
+	Author     primitive.ObjectID `json:"author" bson:"author" example:"6376c8283cc695e19d785b08"`
+	Title      string             `json:"title" bson:"title" example:"This is a form!"`
+	HasPoints  bool               `json:"has_points" bson:"has_points" example:"true"`
 	Items      []FormItem         `json:"items" bson:"items"`
-	UploadDate primitive.DateTime `json:"upload_date" bson:"upload_date"`
-	UpdateDate primitive.DateTime `json:"update_date" bson:"update_date"`
+	UploadDate primitive.DateTime `json:"upload_date" bson:"upload_date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	UpdateDate primitive.DateTime `json:"update_date" bson:"update_date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 	Status     bool               `bson:"status"`
 }
 
 // Types With Lookup
 type FormItemWLookup struct {
-	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Title      string             `json:"title" bson:"title"`
-	PointsType string             `json:"points_type,omitempty" bson:"points_type,omitempty"`
+	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"6376c8283cc695e19d785b08"`
+	Title      string             `json:"title" bson:"title" example:"This is a item title!"`
+	PointsType string             `json:"points_type,omitempty" bson:"points_type,omitempty" extensions:"x-omitempty"`
 	Questions  []ItemQuestion     `json:"questions" bson:"questions"`
 }
 
 type FormWLookup struct {
-	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Title      string             `json:"title" bson:"title"`
+	ID         primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"6376c8283cc695e19d785b08"`
+	Title      string             `json:"title" bson:"title" example:"This is a form!"`
 	HasPoints  bool               `json:"has_points" bson:"has_points"`
 	Items      []FormItemWLookup  `json:"items" bson:"items"`
-	UploadDate primitive.DateTime `json:"upload_date" bson:"upload_date"`
-	UpdateDate primitive.DateTime `json:"update_date" bson:"update_date"`
+	UploadDate primitive.DateTime `json:"upload_date" bson:"upload_date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	UpdateDate primitive.DateTime `json:"update_date" bson:"update_date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 type FormModel struct {
@@ -253,7 +256,7 @@ func (form *FormModel) NewDocument(data interface{}) (*mongo.InsertOneResult, er
 // Form Question model
 func NewModelsFormQuestion(
 	question *forms.QuestionForm,
-	item *forms.ItemForm,
+	_ *forms.ItemForm,
 	points int,
 ) *ItemQuestion {
 	questionData := ItemQuestion{

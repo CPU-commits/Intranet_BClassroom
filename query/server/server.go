@@ -6,13 +6,16 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/CPU-commits/Intranet_BClassroom/controllers"
 	"github.com/CPU-commits/Intranet_BClassroom/middlewares"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
+	controllers_query "github.com/CPU-commits/Intranet_BClassroom/query/controllers"
+	"github.com/CPU-commits/Intranet_BClassroom/query/docs"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func init() {
@@ -33,6 +36,11 @@ func Init() {
 			Message: "Server Internal Error",
 		})
 	}))
+	// Docs
+	docs.SwaggerInfo.BasePath = "/api/c/classroom"
+	docs.SwaggerInfo.Version = "v1"
+	docs.SwaggerInfo.Host = "localhost:8080"
+	// CORS
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"*"},
@@ -71,11 +79,11 @@ func Init() {
 	)
 	{
 		// Init controllers
-		modulesController := new(controllers.ModulesController)
-		publicationsController := new(controllers.PublicationController)
-		formsController := new(controllers.FormController)
-		gradesController := new(controllers.GradesController)
-		worksController := new(controllers.WorkController)
+		modulesController := new(controllers_query.ModulesController)
+		publicationsController := new(controllers_query.PublicationController)
+		formsController := new(controllers_query.FormController)
+		gradesController := new(controllers_query.GradesController)
+		worksController := new(controllers_query.WorkController)
 		// Define routes
 		// Modules
 		modules.GET(
@@ -195,6 +203,8 @@ func Init() {
 			worksController.DownloadFilesWorkStudent,
 		)
 	}
+	// Route docs
+	router.GET("/api/c/classroom/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	// No route
 	router.NoRoute(func(ctx *gin.Context) {
 		ctx.JSON(404, res.Response{

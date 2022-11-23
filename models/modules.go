@@ -13,8 +13,8 @@ const MODULES_COLLECTION = "moduleclasses"
 var moduleModel *ModuleModel
 
 type SubSection struct {
-	ID   primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Name string             `json:"name" bson:"name"`
+	ID   primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Name string             `json:"name" bson:"name" example:"Math - Geo"`
 }
 
 type Module struct {
@@ -28,7 +28,7 @@ type Module struct {
 }
 
 type ModuleWithLookup struct {
-	ID          primitive.ObjectID `json:"_id" bson:"_id"`
+	ID          primitive.ObjectID `json:"_id" bson:"_id" example:"637d5de216f58bc8ec7f7f51"`
 	Section     Section            `json:"section" bson:"section"`
 	Subject     Subject            `json:"subject" bson:"subject"`
 	Semester    Semester           `json:"semester" bson:"semester"`
@@ -36,7 +36,7 @@ type ModuleWithLookup struct {
 	SubSections []SubSection       `json:"sub_sections" bson:"sub_sections"`
 	V           int32              `json:"__v" bson:"__v"`
 	// Works
-	Works []Work `json:"works,omitempty"`
+	Works []Work `json:"works,omitempty" extensions:"x-omitempty"`
 }
 
 type ModuleModel struct {

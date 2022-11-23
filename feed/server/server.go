@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/CPU-commits/Intranet_BClassroom/controllers"
+	controllers_feed "github.com/CPU-commits/Intranet_BClassroom/feed/controllers"
 	"github.com/CPU-commits/Intranet_BClassroom/middlewares"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
@@ -32,6 +32,7 @@ func Init() {
 			Message: "Server Internal Error",
 		})
 	}))
+	// CORS
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{"*"},
@@ -68,11 +69,11 @@ func Init() {
 	)
 	{
 		// Init controllers
-		publicationController := new(controllers.PublicationController)
-		moduleController := new(controllers.ModulesController)
-		formController := new(controllers.FormController)
-		gradesController := new(controllers.GradesController)
-		worksController := new(controllers.WorkController)
+		publicationController := new(controllers_feed.PublicationController)
+		moduleController := new(controllers_feed.ModulesController)
+		formController := new(controllers_feed.FormController)
+		gradesController := new(controllers_feed.GradesController)
+		worksController := new(controllers_feed.WorkController)
 		// Define routes
 		// Module
 		module.POST(

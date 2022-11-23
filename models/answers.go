@@ -16,13 +16,13 @@ const ANSWERS_COLLECTION = "answers"
 var answerModel *AnswerModel
 
 type Answer struct {
-	ID       primitive.ObjectID `bson:"_id,omitempty"`
-	Student  primitive.ObjectID `bson:"student"`
-	Work     primitive.ObjectID `bson:"work"`
-	Question primitive.ObjectID `json:"question" bson:"question"`
-	Answer   int                `json:"answer" bson:"answer"`
-	Response string             `json:"response" bson:"response,omitempty"`
-	Date     primitive.DateTime `json:"date" bson:"date"`
+	ID       primitive.ObjectID `bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Student  primitive.ObjectID `bson:"student" example:"637d5de216f58bc8ec7f7f51"`
+	Work     primitive.ObjectID `bson:"work" example:"637d5de216f58bc8ec7f7f51"`
+	Question primitive.ObjectID `json:"question" bson:"question" example:"637d5de216f58bc8ec7f7f51"`
+	Answer   int                `json:"answer" bson:"answer" example:"1"`
+	Response string             `json:"response" bson:"response,omitempty" example:"Response..."`
+	Date     primitive.DateTime `json:"date" bson:"date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 type AnswerModel struct {

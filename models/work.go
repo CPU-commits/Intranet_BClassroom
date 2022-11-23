@@ -18,56 +18,55 @@ const WORKS_INDEX = "works"
 var worksModel *WorkModel
 
 type WorkPattern struct {
-	ID          primitive.ObjectID `json:"_id" bson:"_id"`
-	Title       string             `json:"title" bson:"title"`
-	Description string             `json:"description" bson:"description"`
-	Points      int                `json:"points" bson:"points"`
+	ID          primitive.ObjectID `json:"_id" bson:"_id" example:"637d5de216f58bc8ec7f7f51"`
+	Title       string             `json:"title" bson:"title" example:"Pattern!"`
+	Description string             `json:"description" bson:"description" example:"This is a description"`
+	Points      int                `json:"points" bson:"points" example:"25"`
 }
 
 // Mongodb
-
 type Work struct {
-	ID             primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Author         primitive.ObjectID `json:"author" bson:"author"`
-	Module         primitive.ObjectID `bson:"module"`
-	Title          string             `json:"title" bson:"title"`
-	Description    string             `json:"description,omitempty" bson:"description,omitempty"`
+	ID             primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Author         primitive.ObjectID `json:"author" bson:"author" example:"637d5de216f58bc8ec7f7f51"`
+	Module         primitive.ObjectID `bson:"module" example:"637d5de216f58bc8ec7f7f51"`
+	Title          string             `json:"title" bson:"title" example:"Work!"`
+	Description    string             `json:"description,omitempty" bson:"description,omitempty" example:"This is a description" extensions:"x-omitempty"`
 	IsQualified    bool               `json:"is_qualified" bson:"is_qualified"`
-	Grade          primitive.ObjectID `json:"grade,omitempty" bson:"grade,omitempty"`
-	Acumulative    primitive.ObjectID `json:"acumulative" bson:"acumulative,omitempty"`
-	Type           string             `json:"type" bson:"type"`
-	Form           primitive.ObjectID `json:"form,omitempty" bson:"form,omitempty"`
-	Pattern        []WorkPattern      `json:"pattern,omitempty" bson:"pattern,omitempty"`
-	DateStart      primitive.DateTime `json:"date_start" bson:"date_start"`
-	DateLimit      primitive.DateTime `json:"date_limit" bson:"date_limit"`
-	FormAccess     string             `json:"form_access,omitempty" bson:"form_access,omitempty"`
-	TimeFormAccess int                `json:"time_access,omitempty" bson:"time_access,omitempty"`
+	Grade          primitive.ObjectID `json:"grade,omitempty" bson:"grade,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
+	Acumulative    primitive.ObjectID `json:"acumulative" bson:"acumulative,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
+	Type           string             `json:"type" bson:"type" example:"form" enums:"files,form"`
+	Form           primitive.ObjectID `json:"form,omitempty" bson:"form,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
+	Pattern        []WorkPattern      `json:"pattern,omitempty" bson:"pattern,omitempty" extensions:"x-omitempty"`
+	DateStart      primitive.DateTime `json:"date_start" bson:"date_start" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	DateLimit      primitive.DateTime `json:"date_limit" bson:"date_limit" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	FormAccess     string             `json:"form_access,omitempty" bson:"form_access,omitempty" example:"default" enums:"default,wtime" extensions:"x-omitempty"`
+	TimeFormAccess int                `json:"time_access,omitempty" bson:"time_access,omitempty" example:"2" extensions:"x-omitempty"`
 	IsRevised      bool               `json:"is_revised" bson:"is_revised"`
-	Attached       []Attached         `json:"attached,omitempty" bson:"attached,omitempty"`
-	DateUpload     primitive.DateTime `json:"date_upload" bson:"date_upload"`
-	DateUpdate     primitive.DateTime `json:"date_update" bson:"date_update"`
+	Attached       []Attached         `json:"attached,omitempty" bson:"attached,omitempty" extensions:"x-omitempty"`
+	DateUpload     primitive.DateTime `json:"date_upload" bson:"date_upload" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	DateUpdate     primitive.DateTime `json:"date_update" bson:"date_update" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 type WorkWLookup struct {
-	ID             primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Module         primitive.ObjectID `bson:"module"`
+	ID             primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Module         primitive.ObjectID `bson:"module" example:"637d5de216f58bc8ec7f7f51"`
 	Author         SimpleUser         `json:"author" bson:"author"`
-	Title          string             `json:"title" bson:"title"`
-	Description    string             `json:"description,omitempty" bson:"description,omitempty"`
-	Form           primitive.ObjectID `json:"form,omitempty" bson:"form,omitempty"`
+	Title          string             `json:"title" bson:"title" example:"This is a title"`
+	Description    string             `json:"description,omitempty" bson:"description,omitempty" example:"This is a description" extensions:"x-omitempty"`
+	Form           primitive.ObjectID `json:"form,omitempty" bson:"form,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
 	IsQualified    bool               `json:"is_qualified" bson:"is_qualified"`
-	Grade          GradesProgram      `json:"grade,omitempty" bson:"grade,omitempty"`
-	Acumulative    primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty"`
-	Type           string             `json:"type" bson:"type"`
-	Pattern        []WorkPattern      `json:"pattern,omitempty" bson:"pattern,omitempty"`
-	DateStart      primitive.DateTime `json:"date_start" bson:"date_start"`
-	DateLimit      primitive.DateTime `json:"date_limit" bson:"date_limit"`
+	Grade          GradesProgram      `json:"grade,omitempty" bson:"grade,omitempty" extensions:"x-omitempty"`
+	Acumulative    primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
+	Type           string             `json:"type" bson:"type" example:"files" enums:"files,form"`
+	Pattern        []WorkPattern      `json:"pattern,omitempty" bson:"pattern,omitempty" extensions:"x-omitempty"`
+	DateStart      primitive.DateTime `json:"date_start" bson:"date_start" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	DateLimit      primitive.DateTime `json:"date_limit" bson:"date_limit" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 	IsRevised      bool               `json:"is_revised" bson:"is_revised"`
-	FormAccess     string             `json:"form_access,omitempty" bson:"form_access,omitempty"`
-	TimeFormAccess int                `json:"time_access,omitempty" bson:"time_access,omitempty"`
+	FormAccess     string             `json:"form_access,omitempty" bson:"form_access,omitempty" example:"default" extensions:"x-omitempty" enums:"default,wtime"`
+	TimeFormAccess int                `json:"time_access,omitempty" bson:"time_access,omitempty" example:"2" extensions:"x-omitempty"`
 	Attached       []Attached         `json:"attached,omitempty" bson:"attached,omitempty"`
-	DateUpload     primitive.DateTime `json:"date_upload" bson:"date_upload"`
-	DateUpdate     primitive.DateTime `json:"date_update" bson:"date_update"`
+	DateUpload     primitive.DateTime `json:"date_upload" bson:"date_upload" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	DateUpdate     primitive.DateTime `json:"date_update" bson:"date_update" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 type AttachedRes struct {
@@ -79,25 +78,25 @@ type AttachedRes struct {
 }
 
 type WorkWLookupNFiles struct {
-	ID             primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Module         primitive.ObjectID `bson:"module"`
+	ID             primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Module         primitive.ObjectID `bson:"module" example:"637d5de216f58bc8ec7f7f51"`
 	Author         SimpleUser         `json:"author" bson:"author"`
-	Title          string             `json:"title" bson:"title"`
-	Description    string             `json:"description,omitempty" bson:"description,omitempty"`
-	Form           primitive.ObjectID `json:"form,omitempty" bson:"form,omitempty"`
+	Title          string             `json:"title" bson:"title" example:"This is a title"`
+	Description    string             `json:"description,omitempty" bson:"description,omitempty" example:"This is a description" extensions:"x-omitempty"`
+	Form           primitive.ObjectID `json:"form,omitempty" bson:"form,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
 	IsQualified    bool               `json:"is_qualified" bson:"is_qualified"`
-	Grade          GradesProgram      `json:"grade,omitempty" bson:"grade,omitempty"`
-	Acumulative    primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty"`
-	Type           string             `json:"type" bson:"type"`
-	Pattern        []WorkPattern      `json:"pattern,omitempty" bson:"pattern,omitempty"`
-	DateStart      primitive.DateTime `json:"date_start" bson:"date_start"`
-	DateLimit      primitive.DateTime `json:"date_limit" bson:"date_limit"`
+	Grade          GradesProgram      `json:"grade,omitempty" bson:"grade,omitempty" extensions:"x-omitempty"`
+	Acumulative    primitive.ObjectID `json:"acumulative,omitempty" bson:"acumulative,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
+	Type           string             `json:"type" bson:"type" example:"files" enums:"files,form"`
+	Pattern        []WorkPattern      `json:"pattern,omitempty" bson:"pattern,omitempty" extensions:"x-omitempty"`
+	DateStart      primitive.DateTime `json:"date_start" bson:"date_start" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	DateLimit      primitive.DateTime `json:"date_limit" bson:"date_limit" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 	IsRevised      bool               `json:"is_revised" bson:"is_revised"`
-	FormAccess     string             `json:"form_access,omitempty" bson:"form_access,omitempty"`
-	TimeFormAccess int                `json:"time_access,omitempty" bson:"time_access,omitempty"`
-	Attached       []AttachedRes      `json:"attached,omitempty" bson:"attached,omitempty"`
-	DateUpload     primitive.DateTime `json:"date_upload" bson:"date_upload"`
-	DateUpdate     primitive.DateTime `json:"date_update" bson:"date_update"`
+	FormAccess     string             `json:"form_access,omitempty" bson:"form_access,omitempty" example:"default" extensions:"x-omitempty" enums:"default,wtime"`
+	TimeFormAccess int                `json:"time_access,omitempty" bson:"time_access,omitempty" extensions:"x-omitempty"`
+	Attached       []AttachedRes      `json:"attached,omitempty" bson:"attached,omitempty" extensions:"x-omitempty"`
+	DateUpload     primitive.DateTime `json:"date_upload" bson:"date_upload" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
+	DateUpdate     primitive.DateTime `json:"date_update" bson:"date_update" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 // ElasticSearch Struct - Work indexer

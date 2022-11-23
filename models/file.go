@@ -12,15 +12,15 @@ const FILES_COLLECTION = "files"
 var fileModel *FileModel
 
 type File struct {
-	ID          primitive.ObjectID `json:"_id" bson:"_id"`
-	Filename    string             `json:"filename" bson:"filename"`
-	Key         string             `json:"key" bson:"key"`
-	Url         string             `json:"url" bson:"url"`
-	Title       string             `json:"title" bson:"title"`
-	Type        string             `json:"type" bson:"type"`
+	ID          primitive.ObjectID `json:"_id" bson:"_id" example:"637d5de216f58bc8ec7f7f51"`
+	Filename    string             `json:"filename" bson:"filename" example:"filename.png"`
+	Key         string             `json:"key" bson:"key" example:"$53r34re"`
+	Url         string             `json:"url" bson:"url" example:"https://example.com/file"`
+	Title       string             `json:"title" bson:"title" example:"Title"`
+	Type        string             `json:"type" bson:"type" example:"application/pdf"`
 	Status      bool               `json:"status" bson:"status"`
-	Permissions string             `json:"permissions" bson:"permissions"`
-	Date        primitive.DateTime `json:"date" bson:"date"`
+	Permissions string             `json:"permissions" bson:"permissions" enums:"private,public,public_classroom" example:"private"`
+	Date        primitive.DateTime `json:"date" bson:"date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 type Date struct {

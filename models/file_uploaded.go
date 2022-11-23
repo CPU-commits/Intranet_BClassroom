@@ -15,9 +15,9 @@ const FILE_UPLOADED_CLASSROOM_COLLECTION = "file_uploaded_classroom"
 var fileUCModel *FileUploadedClassroomModel
 
 type EvaluatedFiles struct {
-	ID      primitive.ObjectID `json:"_id" bson:"_id"`
-	Pattern primitive.ObjectID `json:"pattern" bson:"pattern"`
-	Points  int                `json:"points" bson:"points"`
+	ID      primitive.ObjectID `json:"_id" bson:"_id" example:"637d5de216f58bc8ec7f7f51"`
+	Pattern primitive.ObjectID `json:"pattern" bson:"pattern" example:"637d5de216f58bc8ec7f7f51"`
+	Points  int                `json:"points" bson:"points" example:"25"`
 }
 
 type FileUploadedClassroom struct {
@@ -30,12 +30,12 @@ type FileUploadedClassroom struct {
 }
 
 type FileUploadedClassroomWLookup struct {
-	ID            primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Work          primitive.ObjectID `json:"work" bson:"work"`
-	Student       primitive.ObjectID `json:"student" bson:"student"`
+	ID            primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Work          primitive.ObjectID `json:"work" bson:"work" example:"637d5de216f58bc8ec7f7f51"`
+	Student       primitive.ObjectID `json:"student" bson:"student" example:"637d5de216f58bc8ec7f7f51"`
 	FilesUploaded []File             `json:"files_uploaded" bson:"files_uploaded"`
-	Evaluate      []EvaluatedFiles   `json:"evaluate,omitempty" bson:"evaluate,omitempty"`
-	Date          primitive.DateTime `json:"date" bson:"date"`
+	Evaluate      []EvaluatedFiles   `json:"evaluate,omitempty" bson:"evaluate,omitempty" extensions:"x-omitempty"`
+	Date          primitive.DateTime `json:"date" bson:"date" swaggertype:"string" example:"2022-09-21T20:10:23.309+00:00"`
 }
 
 type FileUploadedClassroomModel struct {

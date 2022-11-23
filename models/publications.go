@@ -19,11 +19,11 @@ var publicationModel *PublicationModel
 
 // MongoDB Struct
 type Attached struct {
-	ID    primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Type  string             `json:"type" bson:"type"` // Link or file
-	File  primitive.ObjectID `json:"file,omitempty" bson:"file,omitempty"`
-	Link  string             `json:"link,omitempty" bson:"link,omitempty"`
-	Title string             `json:"title,omitempty" bson:"title,omitempty"`
+	ID    primitive.ObjectID `json:"_id" bson:"_id,omitempty" example:"637d5de216f58bc8ec7f7f51"`
+	Type  string             `json:"type" bson:"type" example:"link" enums:"link,file"` // Link or file
+	File  primitive.ObjectID `json:"file,omitempty" bson:"file,omitempty" example:"637d5de216f58bc8ec7f7f51" extensions:"x-omitempty"`
+	Link  string             `json:"link,omitempty" bson:"link,omitempty" example:"https://example.com" extensions:"x-omitempty"`
+	Title string             `json:"title,omitempty" bson:"title,omitempty" example:"This is a title" extensions:"x-omitempty"`
 }
 
 // Sub attached
