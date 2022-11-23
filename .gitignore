@@ -7,3 +7,6 @@
 #main
 main_*
 !*.go
+
+#swag
+swag
