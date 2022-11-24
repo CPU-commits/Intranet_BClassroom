@@ -25,6 +25,8 @@ type settings struct {
 	ELS_HOST            string
 	ELS_PORT            int
 	COLLEGE_NAME        string
+	CLIENT_URL          string
+	NODE_ENV            string
 }
 
 func newSettings() *settings {
@@ -45,6 +47,8 @@ func newSettings() *settings {
 		AWS_BUCKET:          os.Getenv("AWS_BUCKET"),
 		AWS_REGION:          os.Getenv("AWS_REGION"),
 		COLLEGE_NAME:        os.Getenv("COLLEGE_NAME"),
+		CLIENT_URL:          os.Getenv("CLIENT_URL"),
+		NODE_ENV:            os.Getenv("NODE_ENV"),
 	}
 }
 

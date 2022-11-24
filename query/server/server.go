@@ -11,12 +11,18 @@ import (
 	controllers_query "github.com/CPU-commits/Intranet_BClassroom/query/controllers"
 	"github.com/CPU-commits/Intranet_BClassroom/query/docs"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
+	"github.com/CPU-commits/Intranet_BClassroom/settings"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/secure"
+	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 )
+
+var settingsData = settings.GetSettings()
 
 func init() {
 	if err := godotenv.Load(); err != nil {
@@ -26,7 +32,20 @@ func init() {
 
 func Init() {
 	router := gin.New()
-	router.Use(gin.Logger())
+	// Proxies
+	router.SetTrustedProxies([]string{"localhost"})
+	// Zap looger
+	logger, err := zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+	router.Use(ginzap.GinzapWithConfig(logger, &ginzap.Config{
+		TimeFormat: time.RFC3339,
+		UTC:        true,
+		SkipPaths:  []string{"/api/c/classroom/swagger"},
+	}))
+	router.Use(ginzap.RecoveryWithZap(logger, true))
+
 	router.Use(gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
 		if err, ok := recovered.(string); ok {
 			c.String(http.StatusInternalServerError, fmt.Sprintf("Server Internal Error: %s", err))
@@ -41,13 +60,37 @@ func Init() {
 	docs.SwaggerInfo.Version = "v1"
 	docs.SwaggerInfo.Host = "localhost:8080"
 	// CORS
+	httpOrigin := "http://" + settingsData.CLIENT_URL
+	httpsOrigin := "https://" + settingsData.CLIENT_URL
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"*"},
-		AllowHeaders:     []string{"*"},
+		AllowOrigins:     []string{httpOrigin, httpsOrigin},
+		AllowMethods:     []string{"GET", "OPTIONS", "PUT", "DELETE", "POST"},
 		AllowCredentials: true,
+		AllowWebSockets:  false,
 		MaxAge:           12 * time.Hour,
 	}))
+	// Secure
+	sslUrl := "ssl." + settingsData.CLIENT_URL
+	secureConfig := secure.Config{
+		SSLHost:              sslUrl,
+		STSSeconds:           315360000,
+		STSIncludeSubdomains: true,
+		FrameDeny:            true,
+		ContentTypeNosniff:   true,
+		BrowserXssFilter:     true,
+		IENoOpen:             true,
+		ReferrerPolicy:       "strict-origin-when-cross-origin",
+		SSLProxyHeaders: map[string]string{
+			"X-Fowarded-Proto": "https",
+		},
+	}
+	if settingsData.NODE_ENV == "prod" {
+		secureConfig.AllowedHosts = []string{
+			settingsData.CLIENT_URL,
+			sslUrl,
+		}
+	}
+	router.Use(secure.New(secureConfig))
 	// Routes
 	defaultRoles := []string{
 		models.STUDENT,
