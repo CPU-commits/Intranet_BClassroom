@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"mime/multipart"
 	"net/http"
@@ -140,7 +139,7 @@ func (w *WorkSerice) GetModulesWorks(claims Claims) ([]WorkStatus, *res.ErrorRes
 					},
 				})
 				if err := cursor.Decode(&fUC); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
-					errRet = &res.ErrorRes{
+					*errRet = res.ErrorRes{
 						Err:        err,
 						StatusCode: http.StatusServiceUnavailable,
 					}
@@ -754,7 +753,7 @@ func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter 
 				StatusCode: http.StatusInternalServerError,
 			}
 		}
-		body, err := ioutil.ReadAll(file.file)
+		body, err := io.ReadAll(file.file)
 		if err != nil {
 			return nil, &res.ErrorRes{
 				Err:        err,
@@ -1099,7 +1098,7 @@ func (w *WorkSerice) saveAnswer(
 	// Save
 	if answer.Answer == nil && answer.Response == "" {
 		if answerData == nil {
-			return fmt.Errorf("La respuesta no existe para ser eliminada")
+			return fmt.Errorf("la respuesta no existe para ser eliminada")
 		}
 		_, err = answerModel.Use().DeleteOne(db.Ctx, bson.D{{
 			Key:   "_id",
@@ -1110,10 +1109,10 @@ func (w *WorkSerice) saveAnswer(
 		}
 	} else {
 		if question.Type == "written" && answer.Response == "" {
-			return fmt.Errorf("No se puede insertar una respuesta de alternativa a una pregunta de escritura")
+			return fmt.Errorf("no se puede insertar una respuesta de alternativa a una pregunta de escritura")
 		}
 		if question.Type != "written" && answer.Answer == nil {
-			return fmt.Errorf("No se puede insertar una respuesta escrita a una pregunta de alternativas")
+			return fmt.Errorf("no se puede insertar una respuesta escrita a una pregunta de alternativas")
 		}
 		if answerData == nil {
 			modelAnswer := models.NewModelAnswer(
@@ -1232,7 +1231,7 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 	}
 	if len(files) > 3 {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Solo se puede subir hasta 3 archivos por trabajo"),
+			Err:        fmt.Errorf("solo se puede subir hasta 3 archivos por trabajo"),
 			StatusCode: http.StatusRequestEntityTooLarge,
 		}
 	}
@@ -1247,13 +1246,13 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 	now := time.Now()
 	if now.Before(work.DateStart.Time()) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Todavía no se puede acceder a este trabajo"),
+			Err:        fmt.Errorf("todavía no se puede acceder a este trabajo"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
 	if now.After(work.DateLimit.Time().Add(7*24*time.Hour)) || work.IsRevised {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Ya no se pueden subir archivos a este trabajo"),
+			Err:        fmt.Errorf("ya no se pueden subir archivos a este trabajo"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -1277,7 +1276,7 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 	}
 	if fUC != nil && len(fUC.FilesUploaded)+len(files) > 3 {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Solo se puede subir hasta 3 archivos por trabajo"),
+			Err:        fmt.Errorf("solo se puede subir hasta 3 archivos por trabajo"),
 			StatusCode: http.StatusRequestEntityTooLarge,
 		}
 	}
@@ -1643,7 +1642,7 @@ func (w *WorkSerice) UploadPointsStudent(
 	}
 	if time.Now().Before(work.DateLimit.Time()) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Todavía no se pueden evaluar preguntas en este formulario"),
+			Err:        fmt.Errorf("todavía no se pueden evaluar preguntas en este formulario"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -1661,7 +1660,7 @@ func (w *WorkSerice) UploadPointsStudent(
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
 			return &res.ErrorRes{
-				Err:        fmt.Errorf("No existe la programación de calificación"),
+				Err:        fmt.Errorf("no existe la programación de calificación"),
 				StatusCode: http.StatusNotFound,
 			}
 		}
@@ -1680,7 +1679,7 @@ func (w *WorkSerice) UploadPointsStudent(
 	}
 	if !form.HasPoints {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No se puede evaluar un formulario sin puntos"),
+			Err:        fmt.Errorf("no se puede evaluar un formulario sin puntos"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -1695,7 +1694,7 @@ func (w *WorkSerice) UploadPointsStudent(
 	}
 	if points < 0 || points > question.Points {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Puntaje fuera de rango. Debe ser entre cero y máx %v", question.Points),
+			Err:        fmt.Errorf("puntaje fuera de rango. Debe ser entre cero y máx %v", question.Points),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -1826,14 +1825,14 @@ func (w *WorkSerice) UploadEvaluateFiles(
 	}
 	if work.Type != "files" {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este trabajo no es de tipo archivos"),
+			Err:        fmt.Errorf("este trabajo no es de tipo archivos"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	now := time.Now()
 	if now.Before(work.DateLimit.Time()) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Todavía no se puede evaluar el trabajo"),
+			Err:        fmt.Errorf("todavía no se puede evaluar el trabajo"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -1857,7 +1856,7 @@ func (w *WorkSerice) UploadEvaluateFiles(
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
 			return &res.ErrorRes{
-				Err:        fmt.Errorf("No existe la programación de calificación"),
+				Err:        fmt.Errorf("no existe la programación de calificación"),
 				StatusCode: http.StatusNotFound,
 			}
 		}
@@ -1880,7 +1879,7 @@ func (w *WorkSerice) UploadEvaluateFiles(
 	})
 	if err := cursor.Decode(&fUC); err != nil {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No se encontraron archivos subidos por parte del alumno"),
+			Err:        fmt.Errorf("no se encontraron archivos subidos por parte del alumno"),
 			StatusCode: http.StatusServiceUnavailable,
 		}
 	}
@@ -1899,7 +1898,7 @@ func (w *WorkSerice) UploadEvaluateFiles(
 			if item.ID == idObjPattern {
 				if item.Points < *ev.Points {
 					return &res.ErrorRes{
-						Err:        fmt.Errorf("Los puntos evaluados superan el máx. del item"),
+						Err:        fmt.Errorf("los puntos evaluados superan el máx. del item"),
 						StatusCode: http.StatusBadRequest,
 					}
 				}
@@ -1909,7 +1908,7 @@ func (w *WorkSerice) UploadEvaluateFiles(
 		}
 		if !exists {
 			return &res.ErrorRes{
-				Err:        fmt.Errorf("No existe el item #%s en este trabajo", ev.Pattern),
+				Err:        fmt.Errorf("no existe el item #%s en este trabajo", ev.Pattern),
 				StatusCode: http.StatusNotFound,
 			}
 		}
@@ -2123,19 +2122,19 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 	}
 	if work.Type != "form" {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("El trabajo no es de tipo formulario"),
+			Err:        fmt.Errorf("el trabajo no es de tipo formulario"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	if time.Now().Before(work.DateLimit.Time()) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este formulario todavía no se puede calificar"),
+			Err:        fmt.Errorf("este formulario todavía no se puede calificar"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
 	if work.IsRevised {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este trabajo ya está evaluado"),
+			Err:        fmt.Errorf("este trabajo ya está evaluado"),
 			StatusCode: http.StatusForbidden,
 		}
 	}
@@ -2150,7 +2149,7 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 	}
 	if !form.HasPoints {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este formulario no puede ser calificado, el formulario no tiene puntos"),
+			Err:        fmt.Errorf("este formulario no puede ser calificado, el formulario no tiene puntos"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -2164,7 +2163,7 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 	}
 	if len(students) == 0 {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No existen alumnos a evaluar en este trabajo"),
+			Err:        fmt.Errorf("no existen alumnos a evaluar en este trabajo"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -2270,7 +2269,7 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 				return
 			}
 			if prom != 100 {
-				*errRet = fmt.Errorf("No todos los alumnos están completamente evaluados")
+				*errRet = fmt.Errorf("no todos los alumnos están completamente evaluados")
 				return
 			}
 			lock.Lock()
@@ -2449,19 +2448,19 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 	}
 	if work.Type != "files" {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("El trabajo no es de tipo archivos"),
+			Err:        fmt.Errorf("el trabajo no es de tipo archivos"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	if time.Now().Before(work.DateLimit.Time()) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este trabajo todavía no se puede calificar"),
+			Err:        fmt.Errorf("este trabajo todavía no se puede calificar"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
 	if work.IsRevised {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este trabajo ya está evaluado"),
+			Err:        fmt.Errorf("este trabajo ya está evaluado"),
 			StatusCode: http.StatusForbidden,
 		}
 	}
@@ -2489,7 +2488,7 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 	}
 	if len(students) == 0 {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No existen alumnos a evaluar en este trabajo"),
+			Err:        fmt.Errorf("no existen alumnos a evaluar en este trabajo"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -2567,7 +2566,7 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 			}
 			// Evaluate
 			if len(fUC.Evaluate) != len(work.Pattern) {
-				*errRet = fmt.Errorf("No todos los alumnos están completamente evaluados con todos los items")
+				*errRet = fmt.Errorf("no todos los alumnos están completamente evaluados con todos los items")
 				return
 			}
 			// Push points
@@ -2707,7 +2706,7 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 	}
 	if workData.IsRevised {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Ya no se puede editar este trabajo"),
+			Err:        fmt.Errorf("ya no se puede editar este trabajo"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -2772,7 +2771,7 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 				}
 				if !find {
 					return &res.ErrorRes{
-						Err:        fmt.Errorf("No se puede actualizar un item que no está registrado"),
+						Err:        fmt.Errorf("no se puede actualizar un item que no está registrado"),
 						StatusCode: http.StatusNotFound,
 					}
 				}
@@ -2802,19 +2801,19 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 			}
 			if !form.Status {
 				return &res.ErrorRes{
-					Err:        fmt.Errorf("Este formulario está eliminado"),
+					Err:        fmt.Errorf("este formulario está eliminado"),
 					StatusCode: http.StatusBadRequest,
 				}
 			}
 			if form.Author != idObjUser {
 				return &res.ErrorRes{
-					Err:        fmt.Errorf("Este formulario no te pertenece"),
+					Err:        fmt.Errorf("este formulario no te pertenece"),
 					StatusCode: http.StatusUnauthorized,
 				}
 			}
 			if !form.HasPoints && workData.IsQualified {
 				return &res.ErrorRes{
-					Err:        fmt.Errorf("Un trabajo evaluado no puede tener un formulario sin puntaje"),
+					Err:        fmt.Errorf("un trabajo evaluado no puede tener un formulario sin puntaje"),
 					StatusCode: http.StatusBadRequest,
 				}
 			}
@@ -2879,19 +2878,19 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 	}
 	if !tStart.IsZero() && !tLimit.IsZero() && tStart.After(tLimit) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("La fecha y hora de inicio es mayor a la limite"),
+			Err:        fmt.Errorf("la fecha y hora de inicio es mayor a la limite"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	if !tStart.IsZero() && tLimit.IsZero() && tStart.After(workData.DateLimit.Time()) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("La fecha y hora de inicio es mayor a la limite registrada"),
+			Err:        fmt.Errorf("la fecha y hora de inicio es mayor a la limite registrada"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	if !tLimit.IsZero() && tStart.IsZero() && workData.DateStart.Time().After(tLimit) {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("La fecha y hora de inicio registrada es mayor a la limite"),
+			Err:        fmt.Errorf("la fecha y hora de inicio registrada es mayor a la limite"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -2970,7 +2969,7 @@ func (w *WorkSerice) DeleteWork(idWork string) *res.ErrorRes {
 	}
 	if work.IsRevised {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No se puede eliminar un trabajo calificado"),
+			Err:        fmt.Errorf("no se puede eliminar un trabajo calificado"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -3175,7 +3174,7 @@ func (w *WorkSerice) DeleteFileClassroom(idWork, idFile, idUser string) *res.Err
 	}
 	if !updated {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No se encontró el archivo a eliminar en este trabajo"),
+			Err:        fmt.Errorf("no se encontró el archivo a eliminar en este trabajo"),
 			StatusCode: http.StatusNotFound,
 		}
 	}
@@ -3207,7 +3206,7 @@ func (w *WorkSerice) DeleteAttached(idWork, idAttached string) *res.ErrorRes {
 	}
 	if work.IsRevised {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Ya no se puede editar este trabajo"),
+			Err:        fmt.Errorf("ya no se puede editar este trabajo"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -3236,7 +3235,7 @@ func (w *WorkSerice) DeleteAttached(idWork, idAttached string) *res.ErrorRes {
 		}
 	}
 	return &res.ErrorRes{
-		Err:        fmt.Errorf("No existe este elemento adjunto al trabajo"),
+		Err:        fmt.Errorf("no existe este elemento adjunto al trabajo"),
 		StatusCode: http.StatusNotFound,
 	}
 }
@@ -3266,13 +3265,13 @@ func (w *WorkSerice) DeleteItemPattern(idWork, idItem string) *res.ErrorRes {
 	}
 	if work.Type != "files" {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este no es un trabajo de archivos"),
+			Err:        fmt.Errorf("este no es un trabajo de archivos"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	if work.IsRevised {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este trabajo ya no se puede editar"),
+			Err:        fmt.Errorf("este trabajo ya no se puede editar"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -3297,7 +3296,7 @@ func (w *WorkSerice) DeleteItemPattern(idWork, idItem string) *res.ErrorRes {
 		}
 	}
 	return &res.ErrorRes{
-		Err:        fmt.Errorf("No existe el item a eliminar"),
+		Err:        fmt.Errorf("no existe el item a eliminar"),
 		StatusCode: http.StatusNotFound,
 	}
 }

@@ -49,7 +49,7 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 	}
 	if len(module.SubSections) <= sectionInt {
 		return nil, 0, &res.ErrorRes{
-			Err:        fmt.Errorf("No existe esta sección"),
+			Err:        fmt.Errorf("no existe esta sección"),
 			StatusCode: http.StatusNotFound,
 		}
 	}
@@ -122,7 +122,7 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 			defer wg.Done()
 			response, err := es.Get(models.PUBLICATIONS_INDEX, publication.ID.Hex())
 			if err != nil {
-				retErr = &res.ErrorRes{
+				*retErr = res.ErrorRes{
 					Err:        err,
 					StatusCode: http.StatusServiceUnavailable,
 				}
@@ -228,7 +228,7 @@ func (p *PublicationService) GetPublication(idModule, idPublication string) (*Pu
 	}
 
 	if len(publication) == 0 {
-		return nil, fmt.Errorf("No existe esta publicación")
+		return nil, fmt.Errorf("no existe esta publicación")
 	}
 	// Get module
 	var module *models.Module
@@ -245,7 +245,7 @@ func (p *PublicationService) GetPublication(idModule, idPublication string) (*Pu
 		}
 	}
 	if !flag {
-		return nil, fmt.Errorf("Esta publicación no pertenece a este módulo")
+		return nil, fmt.Errorf("esta publicación no pertenece a este módulo")
 	}
 	// Get publications content
 	var publicationsRes *PublicationsRes
@@ -321,7 +321,7 @@ func (publication *PublicationService) NewPublication(
 	}
 	if len(module.SubSections) <= sectionInt {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("No existe esta sección"),
+			Err:        fmt.Errorf("no existe esta sección"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -453,7 +453,7 @@ func (publication *PublicationService) UpdatePublication(
 	// Verify user
 	if idUserObj != publicationData.Author {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No tienes acceso a esta publicación"),
+			Err:        fmt.Errorf("no tienes acceso a esta publicación"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -649,13 +649,13 @@ func (publication *PublicationService) DeletePublicationAttached(
 	}
 	if publicationData == nil {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No existe el elemento adjunto"),
+			Err:        fmt.Errorf("no existe el elemento adjunto"),
 			StatusCode: http.StatusNotFound,
 		}
 	}
 	if len(publicationData[0].Attached) == 0 {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Esta publicación no tiene elementos adjuntos"),
+			Err:        fmt.Errorf("esta publicación no tiene elementos adjuntos"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -718,7 +718,7 @@ func hasAccessFromIdModuleNSubSection(idModule, idSubSection primitive.ObjectID)
 		return err
 	}
 	if len(modules) == 0 {
-		return fmt.Errorf("No tienes acceso a esta publicación")
+		return fmt.Errorf("no tienes acceso a esta publicación")
 	}
 	return nil
 }

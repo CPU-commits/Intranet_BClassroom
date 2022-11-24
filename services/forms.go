@@ -305,13 +305,13 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) *r
 	}
 	if !formData.Status {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este formulario no está disponible"),
+			Err:        fmt.Errorf("este formulario no está disponible"),
 			StatusCode: http.StatusForbidden,
 		}
 	}
 	if formData.Author != userObjId {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No tienes acceso para editar este formulario"),
+			Err:        fmt.Errorf("no tienes acceso para editar este formulario"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -336,7 +336,7 @@ func (f *FormService) UpdateForm(form *forms.FormForm, userId, idForm string) *r
 	for _, work := range work {
 		if work.IsRevised {
 			return &res.ErrorRes{
-				Err:        fmt.Errorf("Este formulario está asignado a un trabajo revisado, no se puede editar"),
+				Err:        fmt.Errorf("este formulario está asignado a un trabajo revisado, no se puede editar"),
 				StatusCode: http.StatusForbidden,
 			}
 		}
@@ -530,13 +530,13 @@ func (f *FormService) DeleteForm(idForm, idUser string) *res.ErrorRes {
 	}
 	if !form.Status {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Este formulario ya está eliminado"),
+			Err:        fmt.Errorf("este formulario ya está eliminado"),
 			StatusCode: http.StatusForbidden,
 		}
 	}
 	if form.Author != idObjUser {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("No estás autorizado a eliminar este formulario"),
+			Err:        fmt.Errorf("no estás autorizado a eliminar este formulario"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}

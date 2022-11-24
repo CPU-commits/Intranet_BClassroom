@@ -40,13 +40,13 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 
 	if work.Type != "form" {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("Este trabajo no es de tipo formulario"),
+			Err:        fmt.Errorf("este trabajo no es de tipo formulario"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	if time.Now().Before(work.DateStart.Time()) {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("No se puede acceder a este trabajo todavía"),
+			Err:        fmt.Errorf("no se puede acceder a este trabajo todavía"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -78,7 +78,8 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 		}
 		var diff time.Duration
 		if work.FormAccess == "default" {
-			diff = work.DateLimit.Time().Sub(time.Now())
+			// !Warning - before work.DateLimit.Time().Sub()
+			diff = time.Until(time.Now())
 		} else {
 			diff = time.Duration(work.TimeFormAccess * int(time.Second))
 		}
@@ -103,7 +104,7 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 	}
 	if formAccess == nil && time.Now().After(work.DateLimit.Time()) {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("No accediste al formulario, no hay respuestas a revisar"),
+			Err:        fmt.Errorf("no accediste al formulario, no hay respuestas a revisar"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -328,13 +329,13 @@ func (w *WorkSerice) GetFormStudent(
 	}
 	if work.Type != "form" {
 		return nil, nil, &res.ErrorRes{
-			Err:        fmt.Errorf("El trabajo no es un formulario"),
+			Err:        fmt.Errorf("el trabajo no es un formulario"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
 	if time.Now().Before(work.DateLimit.Time()) {
 		return nil, nil, &res.ErrorRes{
-			Err:        fmt.Errorf("Este formulario todavía no se puede evaluar"),
+			Err:        fmt.Errorf("este formulario todavía no se puede evaluar"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -356,7 +357,7 @@ func (w *WorkSerice) GetFormStudent(
 	}
 	if formAccess == nil {
 		return nil, nil, &res.ErrorRes{
-			Err:        fmt.Errorf("Este alumno no ha tiene respuestas, ya que no abrió el formulario"),
+			Err:        fmt.Errorf("este alumno no ha tiene respuestas, ya que no abrió el formulario"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}

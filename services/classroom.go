@@ -45,7 +45,7 @@ func FindCourses(claims *Claims) ([]ModuleIDs, *res.ErrorRes) {
 		}
 		if studentData.Course.IsZero() {
 			return nil, &res.ErrorRes{
-				Err:        fmt.Errorf("No estás asignado a ningún curso"),
+				Err:        fmt.Errorf("no estás asignado a ningún curso"),
 				StatusCode: http.StatusForbidden,
 			}
 		}
@@ -65,7 +65,7 @@ func FindCourses(claims *Claims) ([]ModuleIDs, *res.ErrorRes) {
 		}
 		if len(teacherData.Imparted) == 0 {
 			return nil, &res.ErrorRes{
-				Err:        fmt.Errorf("No tienes ningún curso asignado"),
+				Err:        fmt.Errorf("no tienes ningún curso asignado"),
 				StatusCode: http.StatusForbidden,
 			}
 		}
@@ -135,7 +135,7 @@ func AuthorizedRouteFromIdModule(idModule string, claims *Claims) error {
 			return err
 		}
 		if moduleHistory == nil {
-			return fmt.Errorf("No tienes acceso a esta sección")
+			return fmt.Errorf("no tienes acceso a esta sección")
 		}
 	}
 	return nil

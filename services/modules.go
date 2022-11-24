@@ -747,7 +747,7 @@ func (module *ModulesService) DownloadModuleFile(
 	// If is a Student
 	if file.Permissions == "private" {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("No tienes acceso a este archivo"),
+			Err:        fmt.Errorf("no tienes acceso a este archivo"),
 			StatusCode: http.StatusUnauthorized,
 		}
 	}
@@ -776,7 +776,7 @@ func (module *ModulesService) DownloadModuleFile(
 		}
 	}
 	return nil, &res.ErrorRes{
-		Err:        fmt.Errorf("No tienes acceso a este archivo"),
+		Err:        fmt.Errorf("no tienes acceso a este archivo"),
 		StatusCode: http.StatusUnauthorized,
 	}
 }

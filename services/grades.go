@@ -162,7 +162,7 @@ func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res
 
 			idObjStudent, err := primitive.ObjectIDFromHex(student.User.ID)
 			if err != nil {
-				errRet = &res.ErrorRes{
+				*errRet = res.ErrorRes{
 					Err:        err,
 					StatusCode: http.StatusBadRequest,
 				}
@@ -359,7 +359,7 @@ func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule 
 	}
 	if pgData != nil {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("Esta calificación ya está programada"),
+			Err:        fmt.Errorf("esta calificación ya está programada"),
 			StatusCode: http.StatusConflict,
 		}
 	}
@@ -407,16 +407,14 @@ func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule 
 	if len(percentage) > 0 && percentage[0].Total+program.Percentage > 100 {
 		return nil, &res.ErrorRes{
 			Err: fmt.Errorf(
-				"El porcentaje indicado superado el 100 por ciento. Queda %v por ciento libre",
+				"el porcentaje indicado superado el 100 por ciento. Queda %v por ciento libre",
 				100-percentage[0].Total,
 			),
 			StatusCode: http.StatusBadRequest,
 		}
 	} else if program.Percentage > 100 {
 		return nil, &res.ErrorRes{
-			Err: fmt.Errorf(
-				"El porcentaje indicado superado el 100 por ciento.",
-			),
+			Err:        fmt.Errorf("el porcentaje indicado superado el 100 por ciento"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -429,7 +427,7 @@ func (g *GradesService) UploadProgram(program *forms.GradeProgramForm, idModule 
 		if sum != 100 {
 			return nil, &res.ErrorRes{
 				Err: fmt.Errorf(
-					"El porcentaje sumatorio de las calificaciones acumulativas debe ser exactamente 100 por cierto",
+					"el porcentaje sumatorio de las calificaciones acumulativas debe ser exactamente 100 por cierto",
 				),
 				StatusCode: http.StatusBadRequest,
 			}
@@ -499,7 +497,7 @@ func (g *GradesService) UploadGrade(
 	}
 	if *grade.Grade < float64(min) || *grade.Grade > float64(max) {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("Calificación inválida. Mín: %v. Máx: %v", min, max),
+			Err:        fmt.Errorf("calificación inválida. Mín: %v. Máx: %v", min, max),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -530,7 +528,7 @@ func (g *GradesService) UploadGrade(
 		}
 		if !exists {
 			return nil, &res.ErrorRes{
-				Err:        fmt.Errorf("La calificación acumulativa no existe"),
+				Err:        fmt.Errorf("la calificación acumulativa no existe"),
 				StatusCode: http.StatusConflict,
 			}
 		}
@@ -566,7 +564,7 @@ func (g *GradesService) UploadGrade(
 	}
 	if gradeData != nil {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("No se puede agregar una calificación ya subida"),
+			Err:        fmt.Errorf("no se puede agregar una calificación ya subida"),
 			StatusCode: http.StatusConflict,
 		}
 	}
@@ -623,7 +621,7 @@ func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) *res.Erro
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
 			return &res.ErrorRes{
-				Err:        fmt.Errorf("No existe la programación de calificación"),
+				Err:        fmt.Errorf("no existe la programación de calificación"),
 				StatusCode: http.StatusNotFound,
 			}
 		}
@@ -634,7 +632,7 @@ func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) *res.Erro
 	}
 	if idObjModule != gradeProgram.Module {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Esta programación de calificación no pertenece al módulo indicado"),
+			Err:        fmt.Errorf("esta programación de calificación no pertenece al módulo indicado"),
 			StatusCode: http.StatusConflict,
 		}
 	}
@@ -652,7 +650,7 @@ func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) *res.Erro
 	}
 	if work != nil {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Esta programación está en uso en el trabajo %s", work.Title),
+			Err:        fmt.Errorf("esta programación está en uso en el trabajo %s", work.Title),
 			StatusCode: http.StatusConflict,
 		}
 	}
@@ -682,7 +680,7 @@ func (g *GradesService) DeleteGradeProgram(idModule, idProgram string) *res.Erro
 	}
 	if grade != nil {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Esta programación está en uso en alguna calificación"),
+			Err:        fmt.Errorf("esta programación está en uso en alguna calificación"),
 			StatusCode: http.StatusConflict,
 		}
 	}
@@ -726,7 +724,7 @@ func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGr
 	}
 	if gradeData.Module != idObjModule {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Esta calificación no pertenece al módulo"),
+			Err:        fmt.Errorf("esta calificación no pertenece al módulo"),
 			StatusCode: http.StatusConflict,
 		}
 	}
@@ -736,7 +734,7 @@ func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGr
 	if err := cursor.Decode(&gradeProgram); err != nil {
 		if err.Error() == db.NO_SINGLE_DOCUMENT {
 			return &res.ErrorRes{
-				Err:        fmt.Errorf("No existe la programación de calificación"),
+				Err:        fmt.Errorf("no existe la programación de calificación"),
 				StatusCode: http.StatusNotFound,
 			}
 		}
@@ -763,7 +761,7 @@ func (g *GradesService) UpdateGrade(grade *forms.UpdateGradeForm, idModule, idGr
 	}
 	if float64(min) > *grade.Grade || float64(max) < *grade.Grade {
 		return &res.ErrorRes{
-			Err:        fmt.Errorf("Calificación inválida. Mín: %v. Máx: %v", min, max),
+			Err:        fmt.Errorf("calificación inválida. Mín: %v. Máx: %v", min, max),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
