@@ -3,6 +3,9 @@ package repositories
 import (
 	"fmt"
 	"net/http"
+	"sort"
+	"sync"
+	"time"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
@@ -138,11 +141,149 @@ func (w *WorkRepository) GetWork(idObjWork primitive.ObjectID) (*models.WorkWLoo
 	}
 	if len(works) == 0 {
 		return nil, &res.ErrorRes{
-			Err:        fmt.Errorf("Work not found"),
+			Err:        fmt.Errorf("work not found"),
 			StatusCode: http.StatusNotFound,
 		}
 	}
 	return &works[0], nil
+}
+
+func (w *WorkRepository) GetModulesWorks(
+	modulesOr bson.A,
+	idObjUser primitive.ObjectID,
+) ([]WorkStatus, *res.ErrorRes) {
+	// Get works
+	var works []models.Work
+	match := bson.D{{
+		Key: "$match",
+		Value: bson.M{
+			"$or":        modulesOr,
+			"is_revised": false,
+			"date_limit": bson.M{
+				"$gte": primitive.NewDateTimeFromTime(time.Now()),
+			},
+		},
+	}}
+	sortA := bson.D{{
+		Key: "$sort",
+		Value: bson.M{
+			"date_limit": 1,
+		},
+	}}
+	project := bson.D{{
+		Key: "$project",
+		Value: bson.M{
+			"title":        1,
+			"is_qualified": 1,
+			"type":         1,
+			"date_start":   1,
+			"date_limit":   1,
+			"date_upload":  1,
+			"module":       1,
+			"_id":          1,
+		},
+	}}
+	cursor, err := workModel.Aggreagate(mongo.Pipeline{
+		match,
+		sortA,
+		project,
+	})
+	if err != nil {
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
+	}
+	if err := cursor.All(db.Ctx, &works); err != nil {
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
+	}
+	// Get status
+	workStatus := make([]WorkStatus, len(works))
+	var wg sync.WaitGroup
+	var errRes *res.ErrorRes
+	c := make(chan (int), 5)
+
+	for i, work := range works {
+		wg.Add(1)
+		c <- 1
+
+		go func(work models.Work, i int, wg *sync.WaitGroup, errRet *res.ErrorRes) {
+			defer wg.Done()
+
+			workStatus[i] = WorkStatus{
+				Title:       work.Title,
+				Module:      work.Module.Hex(),
+				ID:          work.ID.Hex(),
+				IsQualified: work.IsQualified,
+				Type:        work.Type,
+				DateStart:   work.DateStart.Time(),
+				DateLimit:   work.DateLimit.Time(),
+				DateUpload:  work.DateUpload.Time(),
+			}
+			if work.Type == "files" {
+				formAccessRepo := NewFormAccessRepository()
+
+				formAccess, errRes := formAccessRepo.GetFormAccess(bson.D{
+					{
+						Key:   "work",
+						Value: work.ID,
+					},
+					{
+						Key:   "student",
+						Value: idObjUser,
+					},
+				})
+				if errRes != nil {
+					close(c)
+					return
+				}
+				if formAccess != nil {
+					workStatus[i].Status = 2
+				}
+			} else if work.Type == "form" {
+				var formAccess *models.FormAccess
+
+				cursor := formAccessModel.GetOne(bson.D{
+					{
+						Key:   "work",
+						Value: work.ID,
+					},
+					{
+						Key:   "student",
+						Value: idObjUser,
+					},
+				})
+				if err := cursor.Decode(&formAccess); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
+					*errRet = res.ErrorRes{
+						Err:        err,
+						StatusCode: http.StatusServiceUnavailable,
+					}
+					close(c)
+					return
+				}
+				if formAccess != nil {
+					if formAccess.Status == "finished" {
+						workStatus[i].Status = 2
+					} else if formAccess.Status == "opened" {
+						workStatus[i].Status = 1
+					}
+				}
+			}
+			<-c
+		}(work, i, &wg, errRes)
+	}
+	wg.Wait()
+	if errRes != nil {
+		return nil, errRes
+	}
+	// Order by status asc
+	sort.Slice(workStatus, func(i, j int) bool {
+		return workStatus[i].Status < workStatus[j].Status
+	})
+	return workStatus, nil
 }
 
 func (w *WorkRepository) GetWorks(idObjModule primitive.ObjectID) ([]models.WorkWLookup, *res.ErrorRes) {
