@@ -11,6 +11,7 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/settings"
+	ratelimit "github.com/JGLTechnologies/gin-rate-limit"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	ginzap "github.com/gin-contrib/zap"
@@ -18,6 +19,17 @@ import (
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
+
+func keyFunc(c *gin.Context) string {
+	return c.ClientIP()
+}
+
+func ErrorHandler(c *gin.Context, info ratelimit.Info) {
+	c.JSON(http.StatusTooManyRequests, &res.Response{
+		Success: false,
+		Message: "Too many requests. Try again in" + time.Until(info.ResetTime).String(),
+	})
+}
 
 var settingsData = settings.GetSettings()
 
@@ -84,6 +96,16 @@ func Init() {
 		}
 	}
 	router.Use(secure.New(secureConfig))
+	// Rate limit
+	store := ratelimit.InMemoryStore(&ratelimit.InMemoryOptions{
+		Rate:  time.Second,
+		Limit: 7,
+	})
+	mw := ratelimit.RateLimiter(store, &ratelimit.Options{
+		ErrorHandler: ErrorHandler,
+		KeyFunc:      keyFunc,
+	})
+	router.Use(mw)
 	// Validators
 	InitValidators()
 	// Routes
