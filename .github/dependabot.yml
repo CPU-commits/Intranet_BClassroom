@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "[security]"
+      include: scope
+    labels:
+      - "gomod"
+      - "dependencies"
+      - "server"
+    # Disable version updates for npm dependencies
+    open-pull-requests-limit: 0
+    reviewers:
+      - "CPU-commits"
+    target-branch: "master"
+    versioning-strategy: "auto"
