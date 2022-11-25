@@ -16,4 +16,3 @@ updates:
     reviewers:
       - "CPU-commits"
     target-branch: "master"
-    versioning-strategy: "auto"
