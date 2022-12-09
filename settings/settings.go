@@ -23,6 +23,7 @@ type settings struct {
 	AWS_BUCKET          string
 	AWS_REGION          string
 	ELS_HOST            string
+	ELS_PASSWORD        string
 	ELS_PORT            int
 	COLLEGE_NAME        string
 	CLIENT_URL          string
@@ -44,6 +45,7 @@ func newSettings() *settings {
 		NATS_HOST:           os.Getenv("NATS_HOST"),
 		ELS_HOST:            os.Getenv("ELS_HOST"),
 		ELS_PORT:            elsPort,
+		ELS_PASSWORD:        os.Getenv("ELS_PASSWORD"),
 		AWS_BUCKET:          os.Getenv("AWS_BUCKET"),
 		AWS_REGION:          os.Getenv("AWS_REGION"),
 		COLLEGE_NAME:        os.Getenv("COLLEGE_NAME"),
@@ -53,8 +55,10 @@ func newSettings() *settings {
 }
 
 func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("No .env file found")
+	if os.Getenv("NODE_ENV") != "prod" {
+		if err := godotenv.Load(); err != nil {
+			log.Fatalf("No .env file found")
+		}
 	}
 }
 

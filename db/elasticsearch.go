@@ -23,6 +23,7 @@ func NewConnectionEs() (*elasticsearch.Client, error) {
 		Addresses: []string{
 			fmt.Sprintf("http://%s:%d", settingsData.ELS_HOST, settingsData.ELS_PORT),
 		},
+		Password: settingsData.ELS_PASSWORD,
 		Transport: &http.Transport{
 			MaxIdleConns:          10,
 			ResponseHeaderTimeout: time.Second * 2,

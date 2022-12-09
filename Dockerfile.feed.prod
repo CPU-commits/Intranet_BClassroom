@@ -11,7 +11,7 @@ COPY go.sum .
 RUN go mod download
 
 COPY . .
-RUN go build -o ./app ./query/main_query.go
+RUN go build -o ./app ./feed/main_feed.go
 
 # Stage 2 -> Run
 FROM alpine:latest
@@ -21,7 +21,7 @@ RUN apk update && rm -rf /var/cache/apk/*
 RUN mkdir -p /app
 WORKDIR /app
 
-COPY .env /app
+RUN touch .env
 COPY --from=builder /app/app .
 
 EXPOSE 8080

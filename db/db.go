@@ -13,7 +13,6 @@ import (
 const NO_SINGLE_DOCUMENT = "mongo: no documents in result"
 
 var settingsData = settings.GetSettings()
-var collection *mongo.Collection
 var Ctx = context.TODO()
 
 type MongoClient struct {
