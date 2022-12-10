@@ -143,6 +143,9 @@ func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res
 			StatusCode: http.StatusServiceUnavailable,
 		}
 	}
+	if len(students) == 0 {
+		return nil, nil
+	}
 	// Get grades programs
 	programs, errRes := g.GetGradePrograms(idModule)
 	if errRes.Err != nil {
