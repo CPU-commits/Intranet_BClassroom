@@ -34,7 +34,7 @@ func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.Fi
 	}
 	// Get programs
 	programs, errRes := g.GetGradePrograms(idModule)
-	if errRes.Err != nil {
+	if errRes != nil {
 		return nil, errRes
 	}
 	// Init file
@@ -272,7 +272,7 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 		}
 		// Get program grades
 		program, errRes := g.GetGradePrograms(module.ID.Hex())
-		if errRes.Err != nil {
+		if errRes != nil {
 			return err
 		}
 		// Print grades

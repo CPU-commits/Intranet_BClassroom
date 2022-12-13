@@ -148,8 +148,11 @@ func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res
 	}
 	// Get grades programs
 	programs, errRes := g.GetGradePrograms(idModule)
-	if errRes.Err != nil {
+	if errRes != nil {
 		return nil, errRes
+	}
+	if len(programs) == 0 {
+		return nil, nil
 	}
 	// Get students grades
 	studentsGrades := make([]StudentGrade, len(students))
@@ -241,7 +244,7 @@ func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res
 		}(student, i, errRes, &wg)
 	}
 	wg.Wait()
-	if errRes.Err != nil {
+	if errRes != nil {
 		return nil, errRes
 	}
 	return studentsGrades, nil
@@ -264,7 +267,7 @@ func (g *GradesService) GetStudentGrades(idModule, idStudent string) ([]*Ordered
 	}
 	// Get grades programs
 	programs, errRes := g.GetGradePrograms(idModule)
-	if errRes.Err != nil {
+	if errRes != nil {
 		return nil, errRes
 	}
 	// Get grades

@@ -52,7 +52,7 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 	}
 	// Get form
 	form, errRes := formService.GetForm(work.Form.Hex(), userId, false)
-	if errRes.Err != nil {
+	if errRes != nil {
 		return nil, errRes
 	}
 	// Get form access
@@ -341,7 +341,7 @@ func (w *WorkSerice) GetFormStudent(
 	}
 	// Get form
 	form, errRes := formService.GetForm(work.Form.Hex(), primitive.NilObjectID.Hex(), false)
-	if errRes.Err != nil {
+	if errRes != nil {
 		return nil, nil, &res.ErrorRes{
 			Err:        err,
 			StatusCode: http.StatusServiceUnavailable,

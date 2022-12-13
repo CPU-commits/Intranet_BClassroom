@@ -110,7 +110,7 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 			StatusCode: http.StatusServiceUnavailable,
 		}
 	}
-	var errRes *res.ErrorRes
+	var errRes res.ErrorRes
 	var wg sync.WaitGroup
 	c := make(chan (int), 5)
 
@@ -175,11 +175,11 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 			response.Body.Close()
 
 			<-c
-		}(publication, i, errRes, &wg)
+		}(publication, i, &errRes, &wg)
 	}
 	wg.Wait()
-	if errRes != nil {
-		return nil, 0, errRes
+	if errRes.Err != nil {
+		return nil, 0, &errRes
 	}
 	// Sort
 	sort.Slice(publicationsRes, func(i, j int) bool {
