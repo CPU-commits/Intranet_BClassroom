@@ -10,6 +10,8 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+const QUEUE_NAME = "classroom"
+
 type NatsClient struct {
 	conn *nats.Conn
 }
@@ -64,6 +66,10 @@ func (nats *NatsClient) Subscribe(channel string, toDo func(m *nats.Msg)) {
 
 func (nats *NatsClient) Publish(channel string, message []byte) {
 	nats.conn.Publish(channel, message)
+}
+
+func (client *NatsClient) Queue(channel string, toDo func(m *nats.Msg)) {
+	client.conn.QueueSubscribe(channel, QUEUE_NAME, toDo)
 }
 
 func (nats *NatsClient) Request(channel string, data []byte) (*nats.Msg, error) {
