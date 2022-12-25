@@ -128,6 +128,14 @@ func (g *GradesService) orderInSliceGradesStudent(
 }
 
 func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjModule, err := primitive.ObjectIDFromHex(idModule)
 	if err != nil {
 		return nil, &res.ErrorRes{

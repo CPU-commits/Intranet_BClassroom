@@ -32,6 +32,14 @@ func (publication *PublicationService) GetPublicationsFromIdModule(
 	limit int,
 	total bool,
 ) ([]*PublicationsRes, int64, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	sectionInt, err := strconv.Atoi(section)
 	if err != nil {
 		return nil, 0, &res.ErrorRes{

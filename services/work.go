@@ -32,6 +32,14 @@ var workService *WorkSerice
 type WorkSerice struct{}
 
 func (w *WorkSerice) GetModulesWorks(claims Claims) ([]WorkStatus, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjUser, err := primitive.ObjectIDFromHex(claims.ID)
 	if err != nil {
 		return nil, &res.ErrorRes{
@@ -444,13 +452,23 @@ func (w *WorkSerice) getStudentEvaluate(
 	idStudent,
 	idWork primitive.ObjectID,
 ) (int, int, error) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	var err error
 	var wg sync.WaitGroup
 	var lock sync.Mutex
+	c := make(chan (int), 5)
 	totalPoints := 0
 	evaluatedSum := 0
 	for _, question := range questions {
 		wg.Add(1)
+		c <- 1
 		go func(question models.ItemQuestion, wg *sync.WaitGroup, lock *sync.Mutex, errRet *error) {
 			defer wg.Done()
 			if question.Type == "alternatives_correct" {
@@ -462,6 +480,7 @@ func (w *WorkSerice) getStudentEvaluate(
 					if err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
 					}
+					close(c)
 					return
 				}
 				if question.Correct == answer.Answer {
@@ -487,6 +506,7 @@ func (w *WorkSerice) getStudentEvaluate(
 				})
 				if err := cursor.Decode(&evaluateAnswer); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 					*errRet = err
+					close(c)
 					return
 				}
 				if evaluateAnswer != nil {
@@ -496,6 +516,7 @@ func (w *WorkSerice) getStudentEvaluate(
 					lock.Unlock()
 				}
 			}
+			<-c
 		}(question, &wg, &lock, &err)
 	}
 	wg.Wait()
@@ -567,6 +588,14 @@ func (w *WorkSerice) getFilesUploadedStudent(
 }
 
 func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return nil, -1, &res.ErrorRes{
@@ -598,6 +627,7 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int,
 	}
 	// Get access of students
 	var wg sync.WaitGroup
+	c := make(chan (int), 5)
 	var questionsWPoints []models.ItemQuestion
 	if work.Type == "form" {
 		questions, err := w.getQuestionsFromIdForm(work.Form)
@@ -615,6 +645,7 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int,
 	}
 	for i, student := range students {
 		wg.Add(1)
+		c <- 1
 		go func(student Student, index int, wg *sync.WaitGroup, errRet *error) {
 			defer wg.Done()
 			idObjStudent, _ := primitive.ObjectIDFromHex(student.User.ID)
@@ -661,6 +692,7 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int,
 					students[index].FilesUploaded = nil
 				}
 			}
+			<-c
 		}(student, i, &wg, &err)
 	}
 	wg.Wait()
@@ -685,6 +717,14 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int,
 }
 
 func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter io.Writer) (*zip.Writer, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return nil, &res.ErrorRes{
@@ -720,8 +760,10 @@ func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter 
 	}
 	files := make([]File, len(fUC[0].FilesUploaded))
 	var wg sync.WaitGroup
+	c := make(chan (int), 5)
 	for i, file := range fUC[0].FilesUploaded {
 		wg.Add(1)
+		c <- 1
 		go func(file models.File, i int, wg *sync.WaitGroup, errRet *error) {
 			defer wg.Done()
 
@@ -734,6 +776,7 @@ func (w *WorkSerice) DownloadFilesWorkStudent(idWork, idStudent string, writter 
 				file: bytes,
 				name: file.Filename,
 			}
+			<-c
 		}(file, i, &wg, &err)
 	}
 	wg.Wait()
@@ -1215,6 +1258,14 @@ func (w *WorkSerice) SaveAnswer(answer *forms.AnswerForm, idWork, idQuestion, id
 }
 
 func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser string) *res.ErrorRes {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return &res.ErrorRes{
@@ -1283,6 +1334,7 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 	// UploadFiles
 	filesIds := make([]primitive.ObjectID, len(files))
 	var wg sync.WaitGroup
+	c := make(chan (int), 5)
 
 	type FileNats struct {
 		Location string `json:"location"`
@@ -1292,6 +1344,7 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 	}
 	for i, file := range files {
 		wg.Add(1)
+		c <- 1
 		go func(file multipart.FileHeader, i int, wg *sync.WaitGroup, errRet *error) {
 			defer wg.Done()
 			// Upload files to S3
@@ -1335,6 +1388,7 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 				return
 			}
 			filesIds[i] = idObjFile
+			<-c
 		}(*file, i, &wg, &err)
 	}
 	wg.Wait()
@@ -1377,6 +1431,14 @@ func (w *WorkSerice) UploadFiles(files []*multipart.FileHeader, idWork, idUser s
 }
 
 func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent string) *res.ErrorRes {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return &res.ErrorRes{
@@ -1408,6 +1470,7 @@ func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent st
 	}
 	// Save answers
 	var wg sync.WaitGroup
+	c := make(chan (int), 5)
 	for _, answer := range answers.Answers {
 		idObjQuestion, err := primitive.ObjectIDFromHex(answer.Question)
 		if err != nil {
@@ -1418,6 +1481,7 @@ func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent st
 		}
 		if answer.Answer != nil && answer.Response != "" {
 			wg.Add(1)
+			c <- 1
 			answer := &forms.AnswerForm{
 				Answer:   answer.Answer,
 				Response: answer.Response,
@@ -1435,6 +1499,7 @@ func (w *WorkSerice) FinishForm(answers *forms.AnswersForm, idWork, idStudent st
 				if err != nil {
 					*errRes = err
 				}
+				<-c
 			}(answer, idObjWork, idObjStudent, idObjQuestion, &wg, &err)
 		}
 	}
@@ -2098,6 +2163,14 @@ func (w *WorkSerice) gradeEvaluatedWork(
 }
 
 func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return &res.ErrorRes{
@@ -2201,8 +2274,10 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 	// /To add evaluated status
 	var wg sync.WaitGroup
 	var lock sync.Mutex
+	c := make(chan (int), 5)
 	for _, student := range students {
 		wg.Add(1)
+		c <- 1
 		go func(student Student, wg *sync.WaitGroup, lock *sync.Mutex, errRet *error) {
 			defer wg.Done()
 
@@ -2279,6 +2354,7 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 				ExistsGrade: grade != nil,
 			})
 			lock.Unlock()
+			<-c
 		}(student, &wg, &lock, &err)
 	}
 	wg.Wait()
@@ -2424,6 +2500,14 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 }
 
 func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return &res.ErrorRes{
@@ -2502,8 +2586,10 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 	var studentsPoints []StudentPoints
 	var wg sync.WaitGroup
 	var lock sync.Mutex
+	c := make(chan (int), 1)
 	for _, student := range students {
 		wg.Add(1)
+		c <- 1
 		go func(student Student, wg *sync.WaitGroup, lock *sync.Mutex, errRet *error) {
 			defer wg.Done()
 
@@ -2582,6 +2668,7 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 				ExistsGrade: grade != nil,
 			})
 			lock.Unlock()
+			<-c
 		}(student, &wg, &lock, &err)
 	}
 	wg.Wait()

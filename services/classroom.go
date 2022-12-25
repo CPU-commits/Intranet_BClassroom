@@ -256,7 +256,7 @@ func getLastSemester(idSemester string) (*models.Semester, error) {
 }
 
 func validateDirectivesModule() {
-	nats.Subscribe("validate_directives_module", func(m *natsPackage.Msg) {
+	nats.Queue("validate_directives_module", func(m *natsPackage.Msg) {
 		var success bool = true
 		var messages []string
 
@@ -341,6 +341,14 @@ func validateDirectivesModule() {
 
 func closeGrades() {
 	nats.Subscribe("close_grades_semester", func(m *natsPackage.Msg) {
+		// Recovery if close channel
+		defer func() {
+			recovery := recover()
+			if recovery != nil {
+				fmt.Printf("A channel closed")
+			}
+		}()
+
 		allModules, err := moduleService.GetAllModulesSemester()
 		if err != nil {
 			return

@@ -15,6 +15,14 @@ import (
 )
 
 func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return nil, &res.ErrorRes{
@@ -118,6 +126,7 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 	}
 	var answers = make([]*AnswerRes, questionsLen)
 	var wg sync.WaitGroup
+	c := make(chan (int), 5)
 
 	for j, item := range form[0].Items {
 		var questions = make([]models.ItemQuestion, len(item.Questions))
@@ -125,6 +134,7 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 
 		for i, question := range item.Questions {
 			wg.Add(1)
+			c <- 1
 
 			answerIndex := i
 			for j != 0 {
@@ -158,6 +168,7 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 				answer, err := w.getAnswerStudent(idObjUser, idObjWork, question.ID)
 				if err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 					*returnErr = err
+					close(c)
 					return
 				}
 				// Add answer
@@ -211,16 +222,19 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 					})
 					if err != nil {
 						*returnErr = err
+						close(c)
 						return
 					}
 					if err := cursor.All(db.Ctx, &evaluate); err != nil {
 						*returnErr = err
+						close(c)
 						return
 					}
 					answers[iAnswer].Evaluate = evaluate[0]
 				}
 				// Add question
 				questions[iQuestion] = questionData
+				<-c
 			}(&wg, question, questions, i, answerIndex, &err)
 		}
 		wg.Wait()
@@ -305,6 +319,14 @@ func (w *WorkSerice) GetFormStudent(
 	idWork,
 	idStudent string,
 ) (*models.FormWLookup, []AnswerRes, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	idObjWork, err := primitive.ObjectIDFromHex(idWork)
 	if err != nil {
 		return nil, nil, &res.ErrorRes{
@@ -370,10 +392,12 @@ func (w *WorkSerice) GetFormStudent(
 	}
 	var answers = make([]AnswerRes, questionsLen)
 	var wg sync.WaitGroup
+	c := make(chan (int), 5)
 
 	for i, item := range form[0].Items {
 		for j, question := range item.Questions {
 			wg.Add(1)
+			c <- 1
 
 			iAnswer := j
 			for i != 0 {
@@ -388,6 +412,7 @@ func (w *WorkSerice) GetFormStudent(
 					if err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
 					}
+					close(c)
 					return
 				}
 				// Get evaluate
@@ -409,6 +434,7 @@ func (w *WorkSerice) GetFormStudent(
 					})
 					if err := cursor.Decode(&evaluatedAnswer); err != nil && err.Error() != db.NO_SINGLE_DOCUMENT {
 						*errRet = err
+						close(c)
 						return
 					}
 				}
@@ -416,6 +442,7 @@ func (w *WorkSerice) GetFormStudent(
 					Answer:   *answer,
 					Evaluate: evaluatedAnswer,
 				}
+				<-c
 			}(question, iAnswer, &wg, &err)
 		}
 	}

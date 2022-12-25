@@ -302,6 +302,14 @@ func (module *ModulesService) GetModule(moduleId string) (*models.ModuleWithLook
 }
 
 func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string, simple bool) ([]models.ModuleWithLookup, *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
+
 	// Section IDs must be > 0
 	if len(sectionIds) == 0 {
 		return nil, nil
@@ -363,7 +371,7 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 		// Get next works
 		var wg sync.WaitGroup
 		c := make(chan (int), 5)
-		var errRes *res.ErrorRes
+		var errRes res.ErrorRes
 
 		for i, module := range modulesData {
 			wg.Add(1)
@@ -427,11 +435,11 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 				}
 				modulesData[i].Works = works
 				<-c
-			}(module, i, &wg, errRes)
+			}(module, i, &wg, &errRes)
 		}
 		wg.Wait()
-		if errRes != nil {
-			return nil, errRes
+		if errRes.Err != nil {
+			return nil, &errRes
 		}
 	}
 	// Get only courses
