@@ -151,7 +151,14 @@ func (w *WorkRepository) GetWork(idObjWork primitive.ObjectID) (*models.WorkWLoo
 func (w *WorkRepository) GetModulesWorks(
 	modulesOr bson.A,
 	idObjUser primitive.ObjectID,
-) ([]WorkStatus, *res.ErrorRes) {
+) (response []WorkStatus, error *res.ErrorRes) {
+	// Recovery if close channel
+	defer func() {
+		recovery := recover()
+		if recovery != nil {
+			fmt.Printf("A channel closed")
+		}
+	}()
 	// Get works
 	var works []models.Work
 	match := bson.D{{
@@ -203,7 +210,7 @@ func (w *WorkRepository) GetModulesWorks(
 	// Get status
 	workStatus := make([]WorkStatus, len(works))
 	var wg sync.WaitGroup
-	var errRes *res.ErrorRes
+	var errRes res.ErrorRes
 	c := make(chan (int), 5)
 
 	for i, work := range works {
@@ -273,11 +280,11 @@ func (w *WorkRepository) GetModulesWorks(
 				}
 			}
 			<-c
-		}(work, i, &wg, errRes)
+		}(work, i, &wg, &errRes)
 	}
 	wg.Wait()
-	if errRes != nil {
-		return nil, errRes
+	if errRes.Err != nil {
+		return nil, &errRes
 	}
 	// Order by status asc
 	sort.Slice(workStatus, func(i, j int) bool {

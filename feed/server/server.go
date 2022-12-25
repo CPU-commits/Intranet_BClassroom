@@ -278,6 +278,12 @@ func Init() {
 			worksController.DeleteItemPattern,
 		)
 	}
+	// Route healthz
+	router.GET("/api/c/classroom/healthz", func(ctx *gin.Context) {
+		ctx.JSON(200, &res.Response{
+			Success: true,
+		})
+	})
 	// No route
 	router.NoRoute(func(ctx *gin.Context) {
 		ctx.JSON(404, res.Response{
