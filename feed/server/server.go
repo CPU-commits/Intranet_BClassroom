@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	controllers_feed "github.com/CPU-commits/Intranet_BClassroom/feed/controllers"
@@ -18,6 +19,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func keyFunc(c *gin.Context) string {
@@ -43,17 +46,27 @@ func Init() {
 	router := gin.New()
 	// Proxies
 	router.SetTrustedProxies([]string{"localhost"})
-	// Zap looger
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-	router.Use(ginzap.GinzapWithConfig(logger, &ginzap.Config{
+	// Log file
+	logEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+	fileCore := zapcore.NewCore(logEncoder, zapcore.AddSync(&lumberjack.Logger{
+		Filename:   "logs/app_feed.log",
+		MaxSize:    10,
+		MaxBackups: 3,
+		MaxAge:     7,
+	}), zap.InfoLevel)
+	// Log console
+	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewProductionEncoderConfig())
+	consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), zap.InfoLevel)
+	// Combine cores for multi-output logging
+	teeCore := zapcore.NewTee(fileCore, consoleCore)
+	zapLogger := zap.New(teeCore)
+
+	router.Use(ginzap.GinzapWithConfig(zapLogger, &ginzap.Config{
 		TimeFormat: time.RFC3339,
 		UTC:        true,
-		SkipPaths:  []string{"/api/c/classroom/swagger"},
+		SkipPaths:  []string{"/api/annoucements/swagger"},
 	}))
-	router.Use(ginzap.RecoveryWithZap(logger, true))
+	router.Use(ginzap.RecoveryWithZap(zapLogger, true))
 
 	router.Use(gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
 		if err, ok := recovered.(string); ok {
