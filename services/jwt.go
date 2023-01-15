@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -35,6 +36,9 @@ func VerifyToken(r *http.Request) (*jwt.Token, error) {
 		}
 		return []byte(jwtKey), nil
 	})
+	if !token.Valid {
+		return nil, errors.New("Unauthorized")
+	}
 	if err != nil {
 		return nil, err
 	}
