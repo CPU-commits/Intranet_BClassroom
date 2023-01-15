@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/CPU-commits/Intranet_BClassroom/settings"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	jwt "github.com/golang-jwt/jwt/v4"
 )
 
 var jwtKey = settings.GetSettings().JWT_SECRET_KEY
