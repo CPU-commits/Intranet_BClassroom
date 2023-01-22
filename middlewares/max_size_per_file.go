@@ -47,7 +47,6 @@ func MaxSizePerFile(maxSize float64, maxSizeStr string, maxFiles int, properties
 					}
 				}
 			}
-			fmt.Printf("countFiles: %v\n", countFiles)
 		}
 		ctx.Next()
 		return
