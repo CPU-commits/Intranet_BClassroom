@@ -148,6 +148,7 @@ func Init() {
 	work := router.Group(
 		"/api/c/classroom/works",
 		middlewares.JWTMiddleware(),
+		middlewares.MaxSizePerFile(MAX_FILE_SIZE, MAX_FILE_SIZE_STR, MAX_FILES, "files[]"),
 	)
 	{
 		// Init controllers
