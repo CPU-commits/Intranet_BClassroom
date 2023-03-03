@@ -398,7 +398,7 @@ func (publication *PublicationService) NewPublication(
 	// Notification
 	var titleOfNotification string
 	for i := 0; i < len(publicationData.Content); i++ {
-		titleOfNotification += string(publicationData.Content[i])
+		titleOfNotification += fmt.Sprintf("%v", publicationData.Content[i])
 		if i == 19 {
 			break
 		}
