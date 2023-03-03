@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -397,8 +398,8 @@ func (publication *PublicationService) NewPublication(
 	}
 	// Notification
 	var titleOfNotification string
-	for i := 0; i < len(publicationData.Content); i++ {
-		titleOfNotification += fmt.Sprintf("%v", publicationData.Content[i])
+	for i, c := range strings.Split(publicationData.Content, "") {
+		titleOfNotification += c
 		if i == 19 {
 			break
 		}
