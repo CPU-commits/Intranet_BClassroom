@@ -431,7 +431,7 @@ func (g *GradesService) ExportGradesStudent(claims *Claims, idSemester string, w
 	if err := pdf.Output(w); err != nil {
 		return &res.ErrorRes{
 			Err:        err,
-			StatusCode: http.StatusNotExtended,
+			StatusCode: http.StatusServiceUnavailable,
 		}
 	}
 	return nil

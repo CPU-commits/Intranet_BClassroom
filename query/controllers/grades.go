@@ -190,10 +190,6 @@ func (g *GradesController) ExportGradesStudent(c *gin.Context) {
 	semester := c.DefaultQuery("semester", "")
 
 	claims, _ := services.NewClaimsFromContext(c)
-	c.Writer.Header().Set(
-		"Content-type",
-		"application/pdf",
-	)
 
 	c.Stream(func(w io.Writer) bool {
 		err := gradesService.ExportGradesStudent(claims, semester, w)
@@ -205,6 +201,10 @@ func (g *GradesController) ExportGradesStudent(c *gin.Context) {
 			return false
 		}
 
+		c.Writer.Header().Set(
+			"Content-type",
+			"application/pdf",
+		)
 		c.Writer.Header().Set(
 			"Content-Disposition",
 			fmt.Sprintf("attachment; filename='%s.zip'", claims.Name),
