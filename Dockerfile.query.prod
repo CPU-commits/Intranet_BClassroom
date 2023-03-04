@@ -22,7 +22,10 @@ RUN mkdir -p /app
 WORKDIR /app
 
 RUN touch .env
+# Copy Binary APP
 COPY --from=builder /app/app .
+# Copy Fonts
+COPY ./fonts ./fonts
 
 EXPOSE 8080
 
