@@ -87,7 +87,7 @@ func (w *WorkSerice) GetForm(idWork, userId string) (map[string]interface{}, *re
 		var diff time.Duration
 		if work.FormAccess == "default" {
 			// !Warning - before work.DateLimit.Time().Sub()
-			diff = time.Until(time.Now())
+			diff = time.Until(work.DateLimit.Time())
 		} else {
 			diff = time.Duration(work.TimeFormAccess * int(time.Second))
 		}
