@@ -10,7 +10,7 @@ type QuestionForm struct {
 	ID       string   `json:"_id" validate:"optional" example:"637846a8bc4ea33de990c098"`
 	Question string   `json:"question" binding:"required,min=3" validate:"required" minimum:"3" example:"Who is...?"`
 	Type     string   `json:"type" binding:"required,questionType" validate:"required" enums:"alternatives,alternatives_correct,written" example:"alternatives"`
-	Answers  []string `json:"answers" binding:"dive,min=3,max=100" minimum:"3" maximum:"100" example:"a, b, c"`
+	Answers  []string `json:"answers" binding:"dive,min=1,max=100" minimum:"3" maximum:"100" example:"a, b, c"`
 	Correct  *int     `json:"correct" binding:"required_if=Type alternatives_correct" example:"0"`
 	Points   int      `json:"points" binding:"numeric" example:"21"`
 }
