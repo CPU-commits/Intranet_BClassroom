@@ -19,6 +19,7 @@ type settings struct {
 	MONGO_ROOT_PASSWORD string
 	MONGO_HOST          string
 	MONGO_CONNECTION    string
+	MONGO_PORT          int
 	NATS_HOST           string
 	AWS_BUCKET          string
 	AWS_REGION          string
@@ -36,6 +37,11 @@ func newSettings() *settings {
 	if err != nil {
 		panic(err)
 	}
+	mongoPort, err := strconv.Atoi(os.Getenv("MONGO_PORT"))
+	if err != nil {
+		panic(err)
+	}
+
 	return &settings{
 		JWT_SECRET_KEY:      os.Getenv("JWT_SECRET_KEY"),
 		MONGO_DB:            os.Getenv("MONGO_DB"),
@@ -53,6 +59,7 @@ func newSettings() *settings {
 		COLLEGE_NAME:        os.Getenv("COLLEGE_NAME"),
 		CLIENT_URL:          os.Getenv("CLIENT_URL"),
 		NODE_ENV:            os.Getenv("NODE_ENV"),
+		MONGO_PORT:          mongoPort,
 	}
 }
 
