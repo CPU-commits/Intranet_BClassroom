@@ -26,6 +26,7 @@ type settings struct {
 	ELS_HOST            string
 	ELS_PASSWORD        string
 	ELS_PORT            int
+	ELS_TLS             bool
 	ELS_USERNAME        string
 	COLLEGE_NAME        string
 	CLIENT_URL          string
@@ -41,6 +42,14 @@ func newSettings() *settings {
 	if err != nil {
 		panic(err)
 	}
+	// ELS Tls
+	var elsTLS bool
+	elsTLSEnv := os.Getenv("ELS_TLS")
+	if elsTLSEnv == "" {
+		elsTLS = os.Getenv("NODE_ENV") == "prod"
+	} else {
+		elsTLS = elsTLSEnv == "true"
+	}
 
 	return &settings{
 		JWT_SECRET_KEY:      os.Getenv("JWT_SECRET_KEY"),
@@ -52,6 +61,7 @@ func newSettings() *settings {
 		NATS_HOST:           os.Getenv("NATS_HOST"),
 		ELS_HOST:            os.Getenv("ELS_HOST"),
 		ELS_PORT:            elsPort,
+		ELS_TLS:             elsTLS,
 		ELS_PASSWORD:        os.Getenv("ELS_PASSWORD"),
 		ELS_USERNAME:        os.Getenv("ELS_USERNAME"),
 		AWS_BUCKET:          os.Getenv("AWS_BUCKET"),

@@ -21,7 +21,7 @@ func NewConnectionEs() (*elasticsearch.Client, error) {
 	retryBackoff := backoff.NewExponentialBackOff()
 	protocol := "http"
 
-	if settingsData.NODE_ENV == "prod" {
+	if settingsData.ELS_TLS {
 		protocol += "s"
 	}
 
