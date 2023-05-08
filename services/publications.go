@@ -16,7 +16,7 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
-	"github.com/elastic/go-elasticsearch/v8/esutil"
+	"github.com/elastic/go-elasticsearch/v7/esutil"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"

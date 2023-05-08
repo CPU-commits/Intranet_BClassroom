@@ -19,7 +19,7 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
-	"github.com/elastic/go-elasticsearch/v8/esutil"
+	"github.com/elastic/go-elasticsearch/v7/esutil"
 	"github.com/klauspost/compress/zip"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
