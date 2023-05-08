@@ -51,6 +51,7 @@ func NewConnectionEs() (*elasticsearch.Client, error) {
 	}
 
 	es, err := elasticsearch.NewClient(cfg)
+	fmt.Println("ELS V7")
 	if err != nil {
 		return nil, err
 	}
