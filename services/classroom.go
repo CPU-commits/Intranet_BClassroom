@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
+	"github.com/CPU-commits/Intranet_BClassroom/funct"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/stack"
@@ -23,6 +25,30 @@ var moduleService = NewModulesService()
 func init() {
 	validateDirectivesModule()
 	closeGrades()
+}
+
+func getParentStudents(idObjUser primitive.ObjectID) ([]primitive.ObjectID, *res.ErrorRes) {
+	var parentData *models.Parent
+
+	cursor := parentModel.GetOne(bson.D{{
+		Key:   "user",
+		Value: idObjUser,
+	}})
+	err := cursor.Decode(&parentData)
+	if err != nil {
+		return nil, &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
+	}
+	if len(parentData.Students) == 0 {
+		return nil, &res.ErrorRes{
+			Err:        errors.New("no tienes estudiantes asignados"),
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+
+	return parentData.Students, nil
 }
 
 func FindCourses(claims *Claims) ([]ModuleIDs, *res.ErrorRes) {
@@ -52,7 +78,7 @@ func FindCourses(claims *Claims) ([]ModuleIDs, *res.ErrorRes) {
 		return []ModuleIDs{{
 			IDCourse: studentData.Course,
 		}}, nil
-	} else {
+	} else if claims.UserType == models.TEACHER {
 		var teacherData *models.Teacher
 
 		cursor := teacherModel.GetOne(filter)
@@ -78,6 +104,52 @@ func FindCourses(claims *Claims) ([]ModuleIDs, *res.ErrorRes) {
 			})
 		}
 		return courses, nil
+	} else {
+		students, err := getParentStudents(claims.IDObj)
+		if err != nil {
+			return nil, err
+		}
+		// Get modules students
+		var studentsCourses []ModuleIDs
+
+		for _, student := range students {
+			courses, err := FindCourses(&Claims{
+				ID:       student.Hex(),
+				UserType: models.STUDENT,
+			})
+			if err != nil {
+				return nil, err
+			}
+			for i, course := range courses {
+				course.IDUsers = []primitive.ObjectID{
+					student,
+				}
+
+				courses[i] = course
+			}
+			studentsCourses = append(studentsCourses, courses...)
+		}
+		// Transform modules
+		var studentsCoursesFilter []ModuleIDs
+
+		for _, studentCourse := range studentsCourses {
+			inFilter := funct.Some(studentsCoursesFilter, func(sc ModuleIDs) bool {
+				return sc.IDCourse.Hex() == studentCourse.IDCourse.Hex()
+			})
+			if !inFilter {
+				studentsCoursesFilter = append(studentsCoursesFilter, studentCourse)
+			} else {
+				index := funct.Index(studentsCoursesFilter, func(sc ModuleIDs) bool {
+					return sc.IDCourse.Hex() == studentCourse.IDCourse.Hex()
+				})
+				studentsCoursesFilter[index].IDUsers = append(
+					studentsCoursesFilter[index].IDUsers,
+					studentCourse.IDUsers...,
+				)
+			}
+		}
+
+		return studentsCoursesFilter, nil
 	}
 }
 
@@ -160,12 +232,15 @@ func GetMinNMaxGrade() (int, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	var minMax map[string]int
+	var minMax stack.DefaultNatsResponse[map[string]int]
 	err = json.Unmarshal(jsonString, &minMax)
 	if err != nil {
 		return 0, 0, err
 	}
-	return minMax["min"], minMax["max"], nil
+	if !minMax.Success {
+		return 0, 0, errors.New(minMax.Message)
+	}
+	return minMax.Data["min"], minMax.Data["max"], nil
 }
 
 func getCurrentSemester() (*models.Semester, error) {
@@ -272,7 +347,11 @@ func validateDirectivesModule() {
 		}
 
 		if payload["all_grades"] == true {
-			studentGrades, err := gradesService.GetStudentsGrades(idModule)
+			studentGrades, err := gradesService.GetStudentsGrades(
+				idModule,
+				false,
+				nil,
+			)
 			if err != nil {
 				return
 			}

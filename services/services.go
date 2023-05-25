@@ -21,6 +21,7 @@ var (
 	gradeModel            = models.NewGradesModel()
 	workGradeModel        = models.NewWorkGradesModel()
 	teacherModel          = models.NewTeacherModel()
+	parentModel           = models.NewParentsModel()
 	studentModel          = models.NewStudentModel()
 	formModel             = models.NewFormModel()
 	formQuestionModel     = models.NewFormQuestionModel()

@@ -3,6 +3,7 @@ package controllers
 import (
 	"io"
 
+	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/services"
 	"github.com/gin-gonic/gin"
@@ -217,8 +218,15 @@ func (w *WorkController) GetStudentsStatus(c *gin.Context) {
 	idModule := c.Param("idModule")
 	idWork := c.Param("idWork")
 
+	// Claims
+	claims, _ := services.NewClaimsFromContext(c)
 	// Get
-	students, totalPoints, err := workService.GetStudentsStatus(idModule, idWork)
+	students, totalPoints, err := workService.GetStudentsStatus(
+		idModule,
+		idWork,
+		claims.UserType == models.ATTORNEY,
+		&claims.IDObj,
+	)
 	if err != nil {
 		c.AbortWithStatusJSON(err.StatusCode, &res.Response{
 			Success: false,

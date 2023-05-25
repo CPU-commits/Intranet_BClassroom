@@ -9,12 +9,14 @@ import (
 	"github.com/CPU-commits/Intranet_BClassroom/settings"
 	"github.com/gin-gonic/gin"
 	jwt "github.com/golang-jwt/jwt/v4"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var jwtKey = settings.GetSettings().JWT_SECRET_KEY
 
 type Claims struct {
 	ID       string
+	IDObj    primitive.ObjectID
 	UserType string
 	Name     string
 }
@@ -59,8 +61,14 @@ func NewClaimsFromContext(ctx *gin.Context) (*Claims, bool) {
 	if !exists {
 		return &Claims{}, false
 	}
+	// ObjectID
+	idObjUser, err := primitive.ObjectIDFromHex(user.(*Claims).ID)
+	if err != nil {
+		return &Claims{}, false
+	}
 	return &Claims{
 		ID:       user.(*Claims).ID,
+		IDObj:    idObjUser,
 		UserType: user.(*Claims).UserType,
 		Name:     user.(*Claims).Name,
 	}, true

@@ -553,6 +553,26 @@ func (w *WorkSerice) getStudentsFromIdModule(idModule string) ([]Student, error)
 	return students, nil
 }
 
+func (w *WorkSerice) getStudents(idStudents []primitive.ObjectID) ([]Student, error) {
+	/* Transform to []Student */
+	data, err := formatRequestToNestjsNats(idStudents)
+	if err != nil {
+		return nil, err
+	}
+	// NATS REQ
+	response, err := nats.Request("get_students_from_ids", data)
+	if err != nil {
+		return nil, err
+	}
+	// Payload
+	var studentsData *stack.DefaultNatsResponse[[]Student]
+
+	if err := nats.ExtractPayload(response.Data, &studentsData); err != nil {
+		return nil, err
+	}
+	return studentsData.Data, nil
+}
+
 func (w *WorkSerice) getFilesUploadedStudent(
 	student,
 	work primitive.ObjectID,
@@ -587,7 +607,12 @@ func (w *WorkSerice) getFilesUploadedStudent(
 	return fUC, nil
 }
 
-func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int, *res.ErrorRes) {
+func (w *WorkSerice) GetStudentsStatus(
+	idModule,
+	idWork string,
+	isParent bool,
+	idObjUser *primitive.ObjectID,
+) ([]Student, int, *res.ErrorRes) {
 	// Recovery if close channel
 	defer func() {
 		recovery := recover()
@@ -604,11 +629,28 @@ func (w *WorkSerice) GetStudentsStatus(idModule, idWork string) ([]Student, int,
 		}
 	}
 	// Get students
-	students, err := w.getStudentsFromIdModule(idModule)
-	if err != nil {
-		return nil, -1, &res.ErrorRes{
-			Err:        err,
-			StatusCode: http.StatusServiceUnavailable,
+	var students []Student
+
+	if !isParent {
+		students, err = w.getStudentsFromIdModule(idModule)
+		if err != nil {
+			return nil, -1, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
+		}
+	} else {
+		// Students Parent
+		parentStudents, errRes := getParentStudents(*idObjUser)
+		if errRes != nil {
+			return nil, -1, errRes
+		}
+		students, err = workService.getStudents(parentStudents)
+		if err != nil {
+			return nil, -1, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
 	}
 	// Get work
@@ -2274,7 +2316,7 @@ func (w *WorkSerice) GradeForm(idWork, idUser string) *res.ErrorRes {
 	// /To add evaluated status
 	var wg sync.WaitGroup
 	var lock sync.Mutex
-	c := make(chan (int), 5)
+	c := make(chan (int), 10)
 	for _, student := range students {
 		wg.Add(1)
 		c <- 1
@@ -2586,7 +2628,8 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 	var studentsPoints []StudentPoints
 	var wg sync.WaitGroup
 	var lock sync.Mutex
-	c := make(chan (int), 1)
+	var errorWG error
+	c := make(chan (int), 10)
 	for _, student := range students {
 		wg.Add(1)
 		c <- 1
@@ -2639,15 +2682,15 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 			})
 			if err := cursor.Decode(&fUC); err != nil {
 				if err.Error() != db.NO_SINGLE_DOCUMENT {
-					lock.Lock()
-					studentsPoints = append(studentsPoints, StudentPoints{
-						Student:     idObjStudent,
-						Points:      0,
-						ExistsGrade: grade != nil,
-					})
-					lock.Unlock()
 					*errRet = err
 				}
+				lock.Lock()
+				studentsPoints = append(studentsPoints, StudentPoints{
+					Student:     idObjStudent,
+					Points:      0,
+					ExistsGrade: grade != nil,
+				})
+				lock.Unlock()
 				return
 			}
 			// Evaluate
@@ -2669,12 +2712,12 @@ func (w *WorkSerice) GradeFiles(idWork, idUser string) *res.ErrorRes {
 			})
 			lock.Unlock()
 			<-c
-		}(student, &wg, &lock, &err)
+		}(student, &wg, &lock, &errorWG)
 	}
 	wg.Wait()
-	if err != nil {
+	if errorWG != nil {
 		return &res.ErrorRes{
-			Err:        err,
+			Err:        errorWG,
 			StatusCode: http.StatusServiceUnavailable,
 		}
 	}
@@ -2935,7 +2978,9 @@ func (w *WorkSerice) UpdateWork(work *forms.UpdateWorkForm, idWork, idUser strin
 		}
 		attached = append(attached, attachedModel)
 	}
-	update["attached"] = attached
+	if len(attached) > 0 {
+		update["attached"] = attached
+	}
 	// Date
 	var tStart time.Time
 	var tLimit time.Time

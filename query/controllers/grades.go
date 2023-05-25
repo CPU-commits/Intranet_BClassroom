@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
 	"github.com/CPU-commits/Intranet_BClassroom/services"
 	"github.com/gin-gonic/gin"
@@ -66,8 +67,14 @@ func (g *GradesController) GetProgramGrade(c *gin.Context) {
 // @Router      /grades/get_students_grades/{idModule} [get]
 func (g *GradesController) GetStudentsGrades(c *gin.Context) {
 	idModule := c.Param("idModule")
+	// Claims
+	claims, _ := services.NewClaimsFromContext(c)
 	// Get grades
-	students, err := gradesService.GetStudentsGrades(idModule)
+	students, err := gradesService.GetStudentsGrades(
+		idModule,
+		claims.UserType == models.ATTORNEY,
+		&claims.IDObj,
+	)
 	if err != nil {
 		c.AbortWithStatusJSON(err.StatusCode, &res.Response{
 			Success: false,

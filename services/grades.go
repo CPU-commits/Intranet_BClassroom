@@ -127,7 +127,11 @@ func (g *GradesService) orderInSliceGradesStudent(
 	return orderedGrades
 }
 
-func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res.ErrorRes) {
+func (g *GradesService) GetStudentsGrades(
+	idModule string,
+	isParent bool,
+	idObjUser *primitive.ObjectID,
+) ([]StudentGrade, *res.ErrorRes) {
 	// Recovery if close channel
 	defer func() {
 		recovery := recover()
@@ -144,15 +148,32 @@ func (g *GradesService) GetStudentsGrades(idModule string) ([]StudentGrade, *res
 		}
 	}
 	// Get students
-	students, err := workService.getStudentsFromIdModule(idModule)
-	if err != nil {
-		return nil, &res.ErrorRes{
-			Err:        err,
-			StatusCode: http.StatusServiceUnavailable,
+	var students []Student
+
+	if !isParent {
+		students, err = workService.getStudentsFromIdModule(idModule)
+		if err != nil {
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
 		}
-	}
-	if len(students) == 0 {
-		return nil, nil
+		if len(students) == 0 {
+			return nil, nil
+		}
+	} else {
+		// Students Parent
+		parentStudents, errRes := getParentStudents(*idObjUser)
+		if errRes != nil {
+			return nil, errRes
+		}
+		students, err = workService.getStudents(parentStudents)
+		if err != nil {
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusServiceUnavailable,
+			}
+		}
 	}
 	// Get grades programs
 	programs, errRes := g.GetGradePrograms(idModule)

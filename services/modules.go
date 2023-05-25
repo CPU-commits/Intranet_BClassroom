@@ -11,8 +11,10 @@ import (
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
 	"github.com/CPU-commits/Intranet_BClassroom/forms"
+	"github.com/CPU-commits/Intranet_BClassroom/funct"
 	"github.com/CPU-commits/Intranet_BClassroom/models"
 	"github.com/CPU-commits/Intranet_BClassroom/res"
+	"github.com/CPU-commits/Intranet_BClassroom/stack"
 	natsPackage "github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -440,6 +442,46 @@ func (module *ModulesService) GetModules(sectionIds []ModuleIDs, userType string
 		wg.Wait()
 		if errRes.Err != nil {
 			return nil, &errRes
+		}
+	}
+	// Get student data
+	if userType == models.ATTORNEY {
+		students, err := funct.Map(sectionIds, func(sectionID ModuleIDs) ([]*models.SimpleUser, error) {
+			// Nats request
+			usersString, _ := funct.Map(
+				sectionID.IDUsers,
+				func(idUser primitive.ObjectID) (string, error) {
+					return idUser.Hex(), nil
+				},
+			)
+			users, err := formatRequestToNestjsNats(usersString)
+			if err != nil {
+				return nil, err
+			}
+			// Make request
+			response, err := nats.Request("get_users_by_id", users)
+			if err != nil {
+				return nil, err
+			}
+			// Payload
+			var data stack.DefaultNatsResponse[[]*models.SimpleUser]
+
+			err = nats.ExtractPayload(response.Data, &data)
+			if err != nil {
+				return nil, err
+			}
+			return data.Data, nil
+		})
+		if err != nil {
+			return nil, &res.ErrorRes{
+				Err:        err,
+				StatusCode: http.StatusInternalServerError,
+			}
+		}
+		for i, moduleData := range modulesData {
+			moduleData.Students = students[i]
+
+			modulesData[i] = moduleData
 		}
 	}
 	// Get only courses

@@ -1,7 +1,6 @@
 package middlewares
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/CPU-commits/Intranet_BClassroom/db"
@@ -61,7 +60,7 @@ func AuthorizedRouteModule() gin.HandlerFunc {
 			if err := cursor.Decode(&work); err != nil {
 				ctx.AbortWithStatusJSON(http.StatusNotFound, &res.Response{
 					Success: false,
-					Message: fmt.Sprintf("No existe el trabajo indicado"),
+					Message: "no existe el trabajo indicado",
 				})
 				return
 			}

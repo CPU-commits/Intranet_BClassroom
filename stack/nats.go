@@ -30,6 +30,14 @@ type NatsGolangReq struct {
 	Data    interface{} `json:"data"`
 }
 
+// Default Nats response !! In implementation
+type DefaultNatsResponse[T any] struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Data    T      `json:"data"`
+	Status  int    `json:"status,omitempty"`
+}
+
 var settingsData = settings.GetSettings()
 
 func newConnection() *nats.Conn {
@@ -64,6 +72,29 @@ func (nats *NatsClient) DecodeDataNest(data []byte) (map[string]interface{}, err
 		return nil, fmt.Errorf("data not is a map")
 	}
 	return payload, nil
+}
+
+func (nats *NatsClient) ExtractPayload(data []byte, structData interface{}) error {
+	var dataNest NatsNestJSRes
+
+	err := json.Unmarshal(data, &dataNest)
+	if err != nil {
+		if err := json.Unmarshal(data, structData); err != nil {
+			return err
+		}
+		return nil
+	}
+	// Serialize
+	dataResponse, err := json.Marshal(dataNest.Response)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(dataResponse, structData)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (nats *NatsClient) Subscribe(channel string, toDo func(m *nats.Msg)) {
@@ -111,8 +142,5 @@ func NewNats() *NatsClient {
 	natsClient := &NatsClient{
 		conn: conn,
 	}
-	natsClient.Subscribe("help", func(m *nats.Msg) {
-		fmt.Printf("Received a message: %s\n", string(m.Data))
-	})
 	return natsClient
 }

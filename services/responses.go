@@ -10,6 +10,7 @@ import (
 type ModuleIDs struct {
 	IDCourse  primitive.ObjectID
 	IDSubject primitive.ObjectID
+	IDUsers   []primitive.ObjectID
 }
 
 type Acumulative struct {

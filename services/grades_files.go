@@ -28,7 +28,7 @@ func (g *GradesService) ExportGrades(idModule string, w io.Writer) (*excelize.Fi
 		}
 	}
 	// Get grades
-	data, errRes := g.GetStudentsGrades(idModule)
+	data, errRes := g.GetStudentsGrades(idModule, false, nil)
 	if errRes != nil {
 		return nil, errRes
 	}

@@ -142,12 +142,16 @@ func Init() {
 	modules := router.Group(
 		"/api/c/classroom/modules",
 		middlewares.JWTMiddleware(),
-		middlewares.RolesMiddleware(defaultRoles),
+		middlewares.RolesMiddleware(
+			append(defaultRoles, models.ATTORNEY),
+		),
 	)
 	publications := router.Group(
 		"/api/c/classroom/publications",
 		middlewares.JWTMiddleware(),
-		middlewares.RolesMiddleware(defaultRoles),
+		middlewares.RolesMiddleware(
+			append(defaultRoles, models.ATTORNEY),
+		),
 	)
 	forms := router.Group(
 		"/api/c/classroom/forms",
@@ -205,13 +209,6 @@ func Init() {
 		// Grades
 		grade.GET(
 			"/get_grade_programs/:idModule",
-			middlewares.RolesMiddleware([]string{
-				models.TEACHER,
-				models.STUDENT,
-				models.STUDENT_DIRECTIVE,
-				models.DIRECTIVE,
-				models.DIRECTOR,
-			}),
 			middlewares.AuthorizedRouteModule(),
 			gradesController.GetProgramGrade,
 		)
@@ -221,13 +218,18 @@ func Init() {
 				models.TEACHER,
 				models.DIRECTOR,
 				models.DIRECTIVE,
+				models.ATTORNEY,
 			}),
 			middlewares.AuthorizedRouteModule(),
 			gradesController.GetStudentsGrades,
 		)
 		grade.GET(
 			"/get_student_grades/:idModule",
-			middlewares.RolesMiddleware([]string{models.STUDENT, models.STUDENT_DIRECTIVE}),
+			middlewares.RolesMiddleware([]string{
+				models.STUDENT,
+				models.STUDENT_DIRECTIVE,
+				models.ATTORNEY,
+			}),
 			middlewares.AuthorizedRouteModule(),
 			gradesController.GetStudentGrades,
 		)
@@ -248,18 +250,26 @@ func Init() {
 		// Works
 		work.GET(
 			"/get_modules_works",
-			middlewares.RolesMiddleware([]string{models.STUDENT, models.STUDENT_DIRECTIVE}),
+			middlewares.RolesMiddleware([]string{
+				models.STUDENT,
+				models.STUDENT_DIRECTIVE,
+				models.ATTORNEY,
+			}),
 			worksController.GetModulesWorks,
 		)
 		work.GET(
 			"/get_works/:idModule",
-			middlewares.RolesMiddleware(defaultRoles),
+			middlewares.RolesMiddleware(
+				append(defaultRoles, models.ATTORNEY),
+			),
 			middlewares.AuthorizedRouteModule(),
 			worksController.GetWorks,
 		)
 		work.GET(
 			"/get_work/:idWork",
-			middlewares.RolesMiddleware(defaultRoles),
+			middlewares.RolesMiddleware(
+				append(defaultRoles, models.ATTORNEY),
+			),
 			middlewares.AuthorizedRouteModule(),
 			worksController.GetWork,
 		)
@@ -271,13 +281,19 @@ func Init() {
 		)
 		work.GET(
 			"/get_students_status/:idModule/:idWork",
-			middlewares.RolesMiddleware([]string{models.TEACHER}),
+			middlewares.RolesMiddleware([]string{
+				models.TEACHER,
+				models.ATTORNEY,
+			}),
 			middlewares.AuthorizedRouteModule(),
 			worksController.GetStudentsStatus,
 		)
 		work.GET(
 			"/get_form_student/:idWork/:idStudent",
-			middlewares.RolesMiddleware([]string{models.TEACHER}),
+			middlewares.RolesMiddleware([]string{
+				models.TEACHER,
+				models.ATTORNEY,
+			}),
 			middlewares.AuthorizedRouteModule(),
 			worksController.GetFormStudent,
 		)

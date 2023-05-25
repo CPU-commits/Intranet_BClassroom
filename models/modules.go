@@ -37,6 +37,8 @@ type ModuleWithLookup struct {
 	V           int32              `json:"__v" bson:"__v"`
 	// Works
 	Works []Work `json:"works,omitempty" extensions:"x-omitempty"`
+	// If parent - Student Assigned
+	Students []*SimpleUser `json:"students,omitempty"`
 }
 
 type ModuleModel struct {

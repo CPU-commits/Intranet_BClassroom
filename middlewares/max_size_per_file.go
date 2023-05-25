@@ -49,6 +49,5 @@ func MaxSizePerFile(maxSize float64, maxSizeStr string, maxFiles int, properties
 			}
 		}
 		ctx.Next()
-		return
 	}
 }
