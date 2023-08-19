@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -54,6 +55,85 @@ func (g *GradesService) GetGradePrograms(idModule string) ([]models.GradesProgra
 		return programs[i].Number < programs[j].Number
 	})
 	return programs, nil
+}
+
+func (*GradesService) ExistsGrade(
+	idStudent,
+	idWork primitive.ObjectID,
+) (exists bool, errRes *res.ErrorRes) {
+	// Get work
+	work, err := workRepository.GetWorkFromId(idWork)
+	if err != nil {
+		errRes = &res.ErrorRes{
+			Err:        err,
+			StatusCode: http.StatusServiceUnavailable,
+		}
+		return
+	}
+	if work.IsQualified {
+		match := bson.D{
+			{
+				Key:   "module",
+				Value: work.Module,
+			},
+			{
+				Key:   "student",
+				Value: idStudent,
+			},
+			{
+				Key:   "program",
+				Value: work.Grade,
+			},
+		}
+		if !work.Acumulative.IsZero() {
+			match = append(match, bson.E{
+				Key:   "acumulative",
+				Value: work.Acumulative,
+			})
+		}
+
+		// Get
+		var grade *models.Grade
+		cursor := gradeModel.GetOne(match)
+		if err := cursor.Decode(&grade); err != nil {
+			if !errors.Is(err, mongo.ErrNoDocuments) {
+				errRes = &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
+			}
+			return
+		}
+		exists = true
+	} else {
+		var workGrade *models.WorkGrade
+
+		cursor := workGradeModel.GetOne(bson.D{
+			{
+				Key:   "work",
+				Value: idWork,
+			},
+			{
+				Key:   "module",
+				Value: work.Module,
+			},
+			{
+				Key:   "student",
+				Value: idStudent,
+			},
+		})
+		if err := cursor.Decode(&workGrade); err != nil {
+			if !errors.Is(err, mongo.ErrNoDocuments) {
+				errRes = &res.ErrorRes{
+					Err:        err,
+					StatusCode: http.StatusServiceUnavailable,
+				}
+			}
+			return
+		}
+		exists = true
+	}
+	return
 }
 
 func (g *GradesService) getIndexAcumulative(

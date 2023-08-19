@@ -18,6 +18,11 @@ type WorkPatternWIDFiles struct {
 	Points      int    `json:"points" binding:"required,min=1" validate:"required" minimum:"1" example:"25"`
 }
 
+type WorkSession struct {
+	Block string   `json:"block" example:"637d5de216f58bc8ec7f7f51" binding:"required" validate:"required"`
+	Dates []string `json:"dates" binding:"required,dive"`
+}
+
 // @Desc grade required if is_qualified==true.
 // @Desc pattern required if type == files.
 // @Desc time_access in seconds.
@@ -28,6 +33,8 @@ type WorkForm struct {
 	Description    string             `json:"description" binding:"max=150" maximum:"150" example:"This is a description..."`
 	IsQualified    *bool              `json:"is_qualified" binding:"required" validate:"required"`
 	Grade          string             `json:"grade,omitempty" binding:"required_if=IsQualified true" example:"637d5de216f58bc8ec7f7f51"`
+	Sessions       []WorkSession      `json:"sessions" binding:"required_if=Type in-person,dive"`
+	Virtual        *bool              `json:"virtual" binding:"required" validate:"required"`
 	Type           string             `json:"type" binding:"required,workType" validate:"required" example:"files" enums:"files,form"`
 	Form           string             `json:"form,omitempty" binding:"required_if=Type form" example:"637d5de216f58bc8ec7f7f51"`
 	Pattern        []WorkPatternFiles `json:"pattern,omitempty" binding:"required_if=Type files,dive"`
@@ -48,6 +55,7 @@ type UpdateWorkForm struct {
 	Pattern        []WorkPatternWIDFiles `json:"pattern" binding:"dive"`
 	DateStart      string                `json:"date_start" example:"2006-01-02 15:04"`
 	DateLimit      string                `json:"date_limit" example:"2006-01-02 15:04"`
+	Sessions       []WorkSession         `json:"sessions" binding:"omitempty,dive"`
 	FormAccess     string                `json:"form_access,omitempty" binding:"formAccessTypeUp" enums:"default,wtime"`
 	TimeFormAccess int                   `json:"time_access,omitempty" example:"3600"` // Seconds
 	Attached       []Attached            `json:"attached" binding:"omitempty,dive"`
@@ -60,12 +68,15 @@ var WorkType validator.Func = func(fl validator.FieldLevel) bool {
 	if fl.Field().Interface() == "form" {
 		return true
 	}
+	if fl.Field().Interface() == "in-person" {
+		return true
+	}
 	return false
 }
 
 var FormAccessType validator.Func = func(fl validator.FieldLevel) bool {
 	parent := fl.Parent().Interface().(WorkForm)
-	if parent.Type == "files" {
+	if parent.Type == "files" || parent.Type == "in-person" {
 		return true
 	}
 	if fl.Field().Interface() == "default" {

@@ -357,6 +357,107 @@ func (w *WorkController) UploadReEvaluateFiles(c *gin.Context) {
 	})
 }
 
+// UploadEvaluateInperson godoc
+// @Summary Upload evaluate Inperson
+// @Desc    Upload evaluate Inperson
+// @Tags    works
+// @Tags    classroom
+// @Tags    roles.teacher
+// @Accept  json
+// @Produce json
+// @Param   idWork    path     string                    true "MongoID"
+// @Param   idStudent path     string                    true "MongoID"
+// @Param   evaluate  body     forms.EvaluateInperson true "Desc"
+// @Failure 400       {object} res.Response{}            "Bad body"
+// @Failure 400       {object} res.Response{}            "Este trabajo no es de tipo presencial"
+// @Failure 400       {object} res.Response{}            "Bad body"
+// @Failure 401       {object} res.Response{}            "Unauthorized"
+// @Failure 401       {object} res.Response{}            "Todavía no se puede evaluar el trabajo"
+// @Failure 401       {object} res.Response{}            "Ya no se puede actualizar el puntaje del alumno"
+// @Failure 401       {object} res.Response{}            "Unauthorized role"
+// @Failure 404       {object} res.Response{}            "No existe la programación de calificación"
+// @Failure 503       {object} res.Response{}            "Service Unavailable - NATS || DB Service Unavailable"
+// @Failure 503       {object} res.Response{}            "No se encontraron archivos subidos por parte del alumno"
+// @Success 200       {object} res.Response{}
+// @Router  /works/upload_evaluate_inperson/{idWork}/{idStudent} [post]
+func (w *WorkController) UploadEvaluateInperson(c *gin.Context) {
+	var evaluate *forms.EvaluateInperson
+	claims, _ := services.NewClaimsFromContext(c)
+	idWork := c.Param("idWork")
+	idStudent := c.Param("idStudent")
+
+	if err := c.BindJSON(&evaluate); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Upload
+	err := workService.UploadEvaluateInperson(evaluate, idWork, claims.ID, idStudent, false)
+	if err != nil {
+		c.AbortWithStatusJSON(err.StatusCode, &res.Response{
+			Success: false,
+			Message: err.Err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
+// UploadReEvaluatePerson godoc
+// @Summary Upload reevaluate Person
+// @Desc    Upload reevaluate Person
+// @Tags    works
+// @Tags    classroom
+// @Tags    roles.teacher
+// @Accept  json
+// @Produce json
+// @Param   idWork    path     string                    true "MongoID"
+// @Param   idStudent path     string                    true "MongoID"
+// @Param   evaluate  body     forms.EvaluateInperson true "Desc"
+// @Failure 400       {object} res.Response{}            "Bad body"
+// @Failure 400       {object} res.Response{}            "Este trabajo no es de tipo archivos"
+// @Failure 400       {object} res.Response{}            "Bad path param"
+// @Failure 400       {object} res.Response{}            "Los puntos evaluados superan el máx. del item"
+// @Failure 401       {object} res.Response{}            "Unauthorized"
+// @Failure 401       {object} res.Response{}            "Todavía no se puede evaluar el trabajo"
+// @Failure 401       {object} res.Response{}            "Ya no se puede actualizar el puntaje del alumno"
+// @Failure 401       {object} res.Response{}            "Unauthorized role"
+// @Failure 404       {object} res.Response{}            "No existe la programación de calificación"
+// @Failure 404       {object} res.Response{}            "No existe el item #%s en este trabajo"
+// @Failure 503       {object} res.Response{}            "Service Unavailable - NATS || DB Service Unavailable"
+// @Failure 503       {object} res.Response{}            "No se encontraron archivos subidos por parte del alumno"
+// @Success 200       {object} res.Response{}
+// @Router  /works/upload_reevaluate_files/{idWork}/{idStudent} [post]
+func (w *WorkController) UploadReEvaluateInperson(c *gin.Context) {
+	var evaluate *forms.EvaluateInperson
+	idWork := c.Param("idWork")
+	idStudent := c.Param("idStudent")
+	claims, _ := services.NewClaimsFromContext(c)
+	if err := c.BindJSON(&evaluate); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, &res.Response{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	// Upload
+	err := workService.UploadEvaluateInperson(evaluate, idWork, claims.ID, idStudent, true)
+	if err != nil {
+		c.AbortWithStatusJSON(err.StatusCode, &res.Response{
+			Success: false,
+			Message: err.Err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
 // UpdateWork godoc
 // @Summary Update work
 // @Desc    Update work
@@ -430,7 +531,7 @@ func (w *WorkController) GradeForm(c *gin.Context) {
 	claims, _ := services.NewClaimsFromContext(c)
 	idWork := c.Param("idWork")
 	// Grade
-	err := workService.GradeForm(idWork, claims.ID)
+	err := workService.GradeWork(idWork, claims.ID, "form")
 	if err != nil {
 		c.AbortWithStatusJSON(err.StatusCode, &res.Response{
 			Success: false,
@@ -466,7 +567,43 @@ func (w *WorkController) GradeFiles(c *gin.Context) {
 	claims, _ := services.NewClaimsFromContext(c)
 	idWork := c.Param("idWork")
 	// Grade
-	err := workService.GradeFiles(idWork, claims.ID)
+	err := workService.GradeWork(idWork, claims.ID, "files")
+	if err != nil {
+		c.AbortWithStatusJSON(err.StatusCode, &res.Response{
+			Success: false,
+			Message: err.Err.Error(),
+		})
+		return
+	}
+	c.JSON(200, &res.Response{
+		Success: true,
+	})
+}
+
+// GradeInperson godoc
+// @Summary Grade inperson work
+// @Desc    Grade inperson work
+// @Tags    works
+// @Tags    classroom
+// @Tags    roles.teacher
+// @Accept  json
+// @Produce json
+// @Param   idWork path     string true "MongoID"
+// @Success 200    {object} res.Response{}
+// @Failure 400    {object} res.Response{} "Bad path param"
+// @Failure 400    {object} res.Response{} "El trabajo no es de tipo presencial"
+// @Failure 400    {object} res.Response{} "No existen alumnos a evaluar en este trabajo"
+// @Failure 401    {object} res.Response{} "Este trabajo todavía no se puede calificar"
+// @Failure 401    {object} res.Response{} "Unauthorized"
+// @Failure 401    {object} res.Response{} "Unauthorized role"
+// @Failure 403    {object} res.Response{} "Este trabajo ya está evaluado"
+// @Failure 503    {object} res.Response{} "Service Unavailable - NATS || DB Service Unavailable"
+// @Router  /works/grade_inperson/{idWork} [post]
+func (*WorkController) GradeInperson(c *gin.Context) {
+	claims, _ := services.NewClaimsFromContext(c)
+	idWork := c.Param("idWork")
+	// Grade
+	err := workService.GradeWork(idWork, claims.ID, "in-person")
 	if err != nil {
 		c.AbortWithStatusJSON(err.StatusCode, &res.Response{
 			Success: false,

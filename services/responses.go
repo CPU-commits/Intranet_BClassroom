@@ -65,6 +65,7 @@ type Student struct {
 	AccessForm         *models.FormAccess                   `json:"access,omitempty" extensions:"x-omitempty"`
 	FilesUploaded      *models.FileUploadedClassroomWLookup `json:"files_uploaded,omitempty" extensions:"x-omitempty"`
 	Evuluate           map[string]int                       `json:"evaluate,omitempty" extensions:"x-omitempty"`
+	Session            *models.SessionWLookup               `json:"session,omitempty" extensions:"x-omitempty"`
 }
 
 type AnswerRes struct {

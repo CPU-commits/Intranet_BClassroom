@@ -213,7 +213,7 @@ func AuthorizedRouteFromIdModule(idModule string, claims *Claims) error {
 	return nil
 }
 
-func GetMinNMaxGrade() (int, int, error) {
+func GetMinNMaxGrade() (min int, max int, err error) {
 	data, err := formatRequestToNestjsNats("")
 	if err != nil {
 		return 0, 0, err

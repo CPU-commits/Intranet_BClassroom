@@ -31,6 +31,7 @@ var (
 	publicationModel      = models.NewPublicationModel()
 	fileModel             = models.NewFileModel()
 	fileUCModel           = models.NewFileUCModel()
+	sessionModel          = models.NewSessionModel()
 )
 
 // Repositories

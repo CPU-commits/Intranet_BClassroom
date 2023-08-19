@@ -126,6 +126,48 @@ func (w *WorkRepository) GetWork(idObjWork primitive.ObjectID) (*models.WorkWLoo
 		w.getLookupUser(),
 		w.getLookupGrade(),
 		setAuthorNGrade,
+		bson.D{{
+			Key: "$lookup",
+			Value: bson.M{
+				"from":         models.CALENDAR_COLLECTION,
+				"as":           "blocks",
+				"localField":   "sessions.block",
+				"foreignField": "blocks._id",
+				"let": bson.M{
+					"sessions_blocks": "$sessions.block",
+				},
+				"pipeline": bson.A{
+					bson.M{"$unwind": bson.M{"path": "$blocks"}},
+					bson.M{
+						"$match": bson.M{
+							"$expr": bson.M{
+								"$in": bson.A{"$blocks._id", "$$sessions_blocks"},
+							},
+						},
+					},
+					bson.M{
+						"$replaceRoot": bson.M{
+							"newRoot": "$blocks",
+						},
+					},
+					bson.M{
+						"$lookup": bson.M{
+							"from":         "calendar_blocks",
+							"as":           "block",
+							"localField":   "block",
+							"foreignField": "number",
+						},
+					},
+					bson.M{
+						"$addFields": bson.M{
+							"block": bson.M{
+								"$arrayElemAt": bson.A{"$block", 0},
+							},
+						},
+					},
+				},
+			},
+		}},
 	})
 	if err != nil {
 		return nil, &res.ErrorRes{
@@ -320,6 +362,7 @@ func (w *WorkRepository) GetWorks(idObjModule primitive.ObjectID) ([]models.Work
 				"is_revised":   1,
 				"date_update":  1,
 				"acumulative":  1,
+				"sessions":     1,
 				"author": bson.M{
 					"$arrayElemAt": bson.A{"$author", 0},
 				},
@@ -343,6 +386,48 @@ func (w *WorkRepository) GetWorks(idObjModule primitive.ObjectID) ([]models.Work
 		lookupGrade,
 		project,
 		order,
+		bson.D{{
+			Key: "$lookup",
+			Value: bson.M{
+				"from":         models.CALENDAR_COLLECTION,
+				"as":           "blocks",
+				"localField":   "sessions.block",
+				"foreignField": "blocks._id",
+				"let": bson.M{
+					"sessions_blocks": "$sessions.block",
+				},
+				"pipeline": bson.A{
+					bson.M{"$unwind": bson.M{"path": "$blocks"}},
+					bson.M{
+						"$match": bson.M{
+							"$expr": bson.M{
+								"$in": bson.A{"$blocks._id", "$$sessions_blocks"},
+							},
+						},
+					},
+					bson.M{
+						"$replaceRoot": bson.M{
+							"newRoot": "$blocks",
+						},
+					},
+					bson.M{
+						"$lookup": bson.M{
+							"from":         "calendar_blocks",
+							"as":           "block",
+							"localField":   "block",
+							"foreignField": "number",
+						},
+					},
+					bson.M{
+						"$addFields": bson.M{
+							"block": bson.M{
+								"$arrayElemAt": bson.A{"$block", 0},
+							},
+						},
+					},
+				},
+			},
+		}},
 	})
 	if err != nil {
 		return nil, &res.ErrorRes{

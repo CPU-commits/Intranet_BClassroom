@@ -256,6 +256,12 @@ func Init() {
 			worksController.GradeFiles,
 		)
 		work.POST(
+			"/grade_inperson/:idWork",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.GradeInperson,
+		)
+		work.POST(
 			"/upload_evaluate_files/:idWork/:idStudent",
 			middlewares.RolesMiddleware(teacherRol),
 			middlewares.AuthorizedRouteModule(),
@@ -266,6 +272,18 @@ func Init() {
 			middlewares.RolesMiddleware(teacherRol),
 			middlewares.AuthorizedRouteModule(),
 			worksController.UploadReEvaluateFiles,
+		)
+		work.POST(
+			"/upload_evaluate_inperson/:idWork/:idStudent",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.UploadEvaluateInperson,
+		)
+		work.POST(
+			"/upload_reevaluate_inperson/:idWork/:idStudent",
+			middlewares.RolesMiddleware(teacherRol),
+			middlewares.AuthorizedRouteModule(),
+			worksController.UploadReEvaluateInperson,
 		)
 		work.PUT(
 			"/update_work/:idWork",
